@@ -1,13 +1,18 @@
 """CLI 调用器抽象基类。
 
 cli-agent-mcp shared/mcp v0.1.0
-同步日期: 2025-12-16
+同步日期: 2025-12-17
 
 提供 CLI 子进程管理、输出流解析、事件回调等基础功能。
 
 重构说明（请求上下文隔离）：
 - ExecutionContext: 持有 per-request 的执行态
 - CLIInvoker: 每次 execute() 创建新的上下文，确保请求间状态隔离
+
+新增功能（致命错误检测）：
+- _FATAL_ERROR_PATTERNS: 致命错误模式列表，子类可扩展
+- _check_stderr_line_for_fatal_error(): stderr 实时错误检测
+- 检测到致命错误时自动终止进程，避免死锁
 """
 
 from __future__ import annotations
@@ -125,6 +130,28 @@ class CLIInvoker(ABC):
         # OpenCode 特有：^ 指示错误位置
         (r"^\s+\^", "error_pointer"),
     ]
+
+    # 致命错误模式 - 匹配到这些模式时立即终止进程
+    # 这些错误表明 CLI 进入了无法恢复的状态（如无限重试循环）
+    # 子类可以通过覆盖此属性来添加 CLI 特有的致命错误模式
+    _FATAL_ERROR_PATTERNS: list[str] = [
+        # Gemini: 无效的会话 ID（会触发无限重试循环）
+        r"Error resuming session: Invalid session identifier",
+        # Gemini: 会话相关错误
+        r"Error resuming session:",
+        # 通用：致命错误标识
+        r"FATAL(?:\s+ERROR)?:",
+        # 权限/认证错误（通常无法恢复）
+        r"(?:Authentication|Authorization)\s+(?:failed|error)",
+        # API key 错误
+        r"(?:Invalid|Missing)\s+API\s*[Kk]ey",
+        # 配置错误
+        r"(?:Configuration|Config)\s+error",
+    ]
+
+    # 致命错误重复阈值 - 同一错误出现超过此次数时终止
+    # 用于检测 CLI 进入重试死循环的情况
+    _FATAL_ERROR_REPEAT_THRESHOLD: int = 3
 
     def __init__(
         self,
@@ -516,21 +543,63 @@ class CLIInvoker(ABC):
         # DEBUG: 收集 stdout 原始输出用于调试
         stdout_lines_raw: list[str] = []
 
-        async def drain_stderr() -> None:
-            """并发读取 stderr，使用环形缓冲防止内存溢出。"""
-            nonlocal stderr_total_size
-            if self._process and self._process.stderr:
-                while True:
-                    chunk = await self._process.stderr.read(4096)
-                    if not chunk:
-                        break
-                    stderr_chunks.append(chunk)
-                    stderr_total_size += len(chunk)
+        # 致命错误检测状态
+        fatal_error_event = asyncio.Event()
+        fatal_error_message: list[str] = []  # 使用列表以便在闭包中修改
+        stderr_error_counts: dict[str, int] = {}  # 用于检测重复错误
 
-                    # 超出上限时，丢弃最旧的数据
-                    while stderr_total_size > STDERR_MAX_SIZE and stderr_chunks:
-                        removed = stderr_chunks.pop(0)
-                        stderr_total_size -= len(removed)
+        async def drain_stderr() -> None:
+            """并发读取 stderr，检测致命错误并使用环形缓冲防止内存溢出。
+
+            致命错误检测策略：
+            1. 模式匹配：检测 _FATAL_ERROR_PATTERNS 中的模式
+            2. 重复检测：同一错误重复超过阈值次数时触发
+            """
+            nonlocal stderr_total_size
+            if not (self._process and self._process.stderr):
+                return
+
+            # 编译致命错误正则表达式
+            fatal_patterns = [re.compile(p, re.IGNORECASE) for p in self._FATAL_ERROR_PATTERNS]
+
+            # 行缓冲：用于从字节流中提取完整行
+            line_buffer = b""
+
+            while True:
+                chunk = await self._process.stderr.read(4096)
+                if not chunk:
+                    # 处理最后剩余的数据
+                    if line_buffer:
+                        line = line_buffer.decode("utf-8", errors="replace")
+                        self._check_stderr_line_for_fatal_error(
+                            line, fatal_patterns, stderr_error_counts,
+                            fatal_error_event, fatal_error_message
+                        )
+                    break
+
+                # 存储原始数据
+                stderr_chunks.append(chunk)
+                stderr_total_size += len(chunk)
+
+                # 超出上限时，丢弃最旧的数据
+                while stderr_total_size > STDERR_MAX_SIZE and stderr_chunks:
+                    removed = stderr_chunks.pop(0)
+                    stderr_total_size -= len(removed)
+
+                # 逐行检测致命错误
+                line_buffer += chunk
+                while b"\n" in line_buffer:
+                    line_bytes, line_buffer = line_buffer.split(b"\n", 1)
+                    line = line_bytes.decode("utf-8", errors="replace")
+
+                    # 检测致命错误
+                    if self._check_stderr_line_for_fatal_error(
+                        line, fatal_patterns, stderr_error_counts,
+                        fatal_error_event, fatal_error_message
+                    ):
+                        # 已检测到致命错误，继续读取以避免管道阻塞
+                        # 但不再做额外检测
+                        pass
 
         stderr_task = asyncio.create_task(drain_stderr())
 
@@ -559,76 +628,137 @@ class CLIInvoker(ABC):
 
         try:
             if self._process.stdout:
-                async for line in self._process.stdout:
-                    try:
-                        decoded = line.decode("utf-8", errors="replace").strip()
-                    except Exception:
-                        continue
-
-                    # DEBUG: 记录原始 stdout 行
-                    stdout_lines_raw.append(decoded)
-
-                    if not decoded:
-                        continue
-
-                    # 尝试解析 JSON
-                    try:
-                        data = json.loads(decoded)
-                    except json.JSONDecodeError:
-                        # 非 JSON 行：尝试提取错误信息
-                        error_info = self._extract_error_from_line(decoded)
-                        if error_info:
-                            error_type, error_msg = error_info
-                            self._captured_errors.append(error_msg)
-                            # 实时发送错误到 GUI
-                            if self._event_callback:
-                                self._send_error_event(
-                                    error_msg,
-                                    error_type=error_type,
-                                    severity="warning",  # API 重试等是警告级别
-                                )
-                        else:
-                            logger.debug(f"Non-JSON line: {decoded[:100]}")
-                        continue
-
-                    # 解析为统一事件
-                    events = self._parse_raw_data(parser, data)
-                    for event in events:
-                        # 消息累积逻辑：合并连续的 delta 消息
-                        is_delta_message = (
-                            event.category.value == "message"
-                            and getattr(event, "is_delta", False)
+                # 使用手动循环替代 async for，以便能够检查 fatal_error_event
+                # async for line in stdout 会阻塞直到有数据，无法响应 fatal_error_event
+                while True:
+                    # 检查是否检测到致命错误（来自 stderr）
+                    if fatal_error_event.is_set():
+                        logger.warning(
+                            f"[FATAL ERROR] Breaking stdout loop due to fatal error in stderr"
                         )
+                        break
 
-                        if is_delta_message:
-                            # 累积 delta 消息
-                            if pending_event is None:
-                                pending_event = event
-                                pending_text = getattr(event, "text", "")
+                    # 使用 wait() 同时等待 stdout 读取和致命错误事件
+                    # 这样即使 stdout 没有输出，也能响应 stderr 中的致命错误
+                    read_task = asyncio.create_task(self._process.stdout.readline())
+                    fatal_wait_task = asyncio.create_task(fatal_error_event.wait())
+
+                    done, pending = await asyncio.wait(
+                        [read_task, fatal_wait_task],
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+
+                    # 取消未完成的任务
+                    for task in pending:
+                        task.cancel()
+                        try:
+                            await task
+                        except asyncio.CancelledError:
+                            pass
+
+                    # 检查是否因为致命错误而完成
+                    if fatal_wait_task in done:
+                        logger.warning(
+                            f"[FATAL ERROR] Exiting stdout loop due to fatal error event"
+                        )
+                        break
+
+                    # 获取读取结果
+                    if read_task in done:
+                        try:
+                            line = read_task.result()
+                        except Exception:
+                            continue
+
+                        # EOF - stdout 关闭
+                        if not line:
+                            break
+
+                        try:
+                            decoded = line.decode("utf-8", errors="replace").strip()
+                        except Exception:
+                            continue
+
+                        # DEBUG: 记录原始 stdout 行
+                        stdout_lines_raw.append(decoded)
+
+                        if not decoded:
+                            continue
+
+                        # 尝试解析 JSON
+                        try:
+                            data = json.loads(decoded)
+                        except json.JSONDecodeError:
+                            # 非 JSON 行：尝试提取错误信息
+                            error_info = self._extract_error_from_line(decoded)
+                            if error_info:
+                                error_type, error_msg = error_info
+                                self._captured_errors.append(error_msg)
+                                # 实时发送错误到 GUI
+                                if self._event_callback:
+                                    self._send_error_event(
+                                        error_msg,
+                                        error_type=error_type,
+                                        severity="warning",  # API 重试等是警告级别
+                                    )
                             else:
-                                # 检查是否同一角色
-                                pending_role = getattr(pending_event, "role", "")
-                                current_role = getattr(event, "role", "")
-                                if pending_role == current_role:
-                                    pending_text += getattr(event, "text", "")
-                                else:
-                                    # 角色不同，先刷新之前的
-                                    flushed = flush_pending()
-                                    if flushed:
-                                        yield flushed
+                                logger.debug(f"Non-JSON line: {decoded[:100]}")
+                            continue
+
+                        # 解析为统一事件
+                        events = self._parse_raw_data(parser, data)
+                        for event in events:
+                            # 消息累积逻辑：合并连续的 delta 消息
+                            is_delta_message = (
+                                event.category.value == "message"
+                                and getattr(event, "is_delta", False)
+                            )
+
+                            if is_delta_message:
+                                # 累积 delta 消息
+                                if pending_event is None:
                                     pending_event = event
                                     pending_text = getattr(event, "text", "")
-                        else:
-                            # 非 delta 消息：先刷新累积的，再 yield 当前
-                            flushed = flush_pending()
-                            if flushed:
-                                yield flushed
-                            yield event
+                                else:
+                                    # 检查是否同一角色
+                                    pending_role = getattr(pending_event, "role", "")
+                                    current_role = getattr(event, "role", "")
+                                    if pending_role == current_role:
+                                        pending_text += getattr(event, "text", "")
+                                    else:
+                                        # 角色不同，先刷新之前的
+                                        flushed = flush_pending()
+                                        if flushed:
+                                            yield flushed
+                                        pending_event = event
+                                        pending_text = getattr(event, "text", "")
+                            else:
+                                # 非 delta 消息：先刷新累积的，再 yield 当前
+                                flushed = flush_pending()
+                                if flushed:
+                                    yield flushed
+                                yield event
 
             # 流结束，刷新剩余的累积消息
             flushed = flush_pending()
             if flushed:
                 yield flushed
+
+            # 处理致命错误（如果检测到）
+            if fatal_error_event.is_set():
+                # 终止子进程
+                logger.warning(f"[FATAL ERROR] Terminating process due to fatal error")
+                await self._terminate_subprocess()
+
+                # 设置错误信息
+                error_msg = fatal_error_message[0] if fatal_error_message else "Fatal error detected in stderr"
+                self._exit_error = f"{self.cli_name} fatal error: {error_msg}"
+
+                # 向 GUI 发送错误事件
+                if self._event_callback:
+                    self._send_error_event(self._exit_error, error_type="fatal_error")
+
+                return  # 跳过正常的进程等待流程
 
             # 等待 stderr 读取完成
             await stderr_task
@@ -636,22 +766,8 @@ class CLIInvoker(ABC):
             # 等待进程结束
             await self._process.wait()
 
-            # DEBUG: 记录完整的子进程执行结果（无论返回码是什么）
+            # 获取 stderr 内容用于错误检查
             stderr_content = b"".join(stderr_chunks).decode("utf-8", errors="replace")
-            stdout_content = "\n".join(stdout_lines_raw)
-            logger.debug(
-                f"[SUBPROCESS] Finished: pid={self._process.pid}\n"
-                f"  Return code: {self._process.returncode}\n"
-                f"  Stdout lines: {len(stdout_lines_raw)}\n"
-                f"  Stderr size: {len(stderr_content)} chars\n"
-                f"  Captured errors: {len(self._captured_errors)}"
-            )
-            # 记录完整的 stdout
-            if stdout_content.strip():
-                logger.debug(f"[SUBPROCESS] Stdout:\n{stdout_content}")
-            # 记录完整的 stderr
-            if stderr_content.strip():
-                logger.debug(f"[SUBPROCESS] Stderr:\n{stderr_content}")
 
             # 检查返回码
             if self._process.returncode != 0:
@@ -678,6 +794,27 @@ class CLIInvoker(ABC):
             self._check_execution_errors(stderr_content)
 
         finally:
+            # DEBUG: 无论正常结束、取消还是异常，统一输出调试信息
+            try:
+                stderr_content = b"".join(stderr_chunks).decode("utf-8", errors="replace")
+                stdout_content = "\n".join(stdout_lines_raw)
+                process_pid = self._process.pid if self._process else "N/A"
+                return_code = self._process.returncode if self._process else "N/A"
+                logger.debug(
+                    f"[SUBPROCESS] Exit: pid={process_pid}\n"
+                    f"  Return code: {return_code}\n"
+                    f"  Stdout lines: {len(stdout_lines_raw)}\n"
+                    f"  Stderr size: {len(stderr_content)} chars\n"
+                    f"  Captured errors: {len(self._captured_errors)}\n"
+                    f"  Fatal error: {fatal_error_event.is_set()}"
+                )
+                if stdout_content.strip():
+                    logger.debug(f"[SUBPROCESS] Stdout:\n{stdout_content}")
+                if stderr_content.strip():
+                    logger.debug(f"[SUBPROCESS] Stderr:\n{stderr_content}")
+            except Exception as e:
+                logger.debug(f"[SUBPROCESS] Debug info error: {e}")
+
             # 确保 stderr task 被取消
             if not stderr_task.done():
                 stderr_task.cancel()
@@ -962,6 +1099,62 @@ class CLIInvoker(ABC):
                 return (error_type, error_msg)
 
         return None
+
+    def _check_stderr_line_for_fatal_error(
+        self,
+        line: str,
+        fatal_patterns: list[re.Pattern[str]],
+        error_counts: dict[str, int],
+        fatal_event: asyncio.Event,
+        fatal_message: list[str],
+    ) -> bool:
+        """检测 stderr 行是否包含致命错误。
+
+        致命错误检测策略：
+        1. 模式匹配：检测 _FATAL_ERROR_PATTERNS 中定义的模式
+        2. 重复检测：同一错误信息重复超过 _FATAL_ERROR_REPEAT_THRESHOLD 次
+
+        Args:
+            line: stderr 行内容
+            fatal_patterns: 编译后的致命错误正则表达式列表
+            error_counts: 错误计数字典（用于检测重复）
+            fatal_event: 致命错误事件（用于通知主循环）
+            fatal_message: 致命错误消息列表（用于存储错误信息）
+
+        Returns:
+            True 如果检测到致命错误，False 否则
+        """
+        if not line.strip():
+            return False
+
+        # 如果已经检测到致命错误，不再重复检测
+        if fatal_event.is_set():
+            return True
+
+        # 1. 模式匹配检测
+        for pattern in fatal_patterns:
+            if pattern.search(line):
+                logger.warning(f"[FATAL ERROR DETECTED] Pattern match: {line[:200]}")
+                fatal_message.clear()
+                fatal_message.append(line)
+                fatal_event.set()
+                return True
+
+        # 2. 重复错误检测
+        # 标准化错误信息（移除时间戳、数字等变化部分）
+        normalized = re.sub(r'\d+', '#', line.strip())
+        error_counts[normalized] = error_counts.get(normalized, 0) + 1
+
+        if error_counts[normalized] >= self._FATAL_ERROR_REPEAT_THRESHOLD:
+            logger.warning(
+                f"[FATAL ERROR DETECTED] Repeated error ({error_counts[normalized]}x): {line[:200]}"
+            )
+            fatal_message.clear()
+            fatal_message.append(f"Repeated error ({error_counts[normalized]}x): {line}")
+            fatal_event.set()
+            return True
+
+        return False
 
     def _check_execution_errors(self, stderr_content: str = "") -> None:
         """检查执行错误的钩子方法。

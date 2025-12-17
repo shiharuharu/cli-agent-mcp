@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cli-agent-mcp"
-version = "0.1.0"
+version = "0.1.1"
 description = "Unified MCP server for Codex, Gemini, and Claude CLI agents"
 readme = "README.md"
 license = "MIT"
