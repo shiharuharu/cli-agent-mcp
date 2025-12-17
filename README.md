@@ -1,5 +1,7 @@
 # cli-agent-mcp
 
+[中文文档](README_zh.md)
+
 Unified MCP (Model Context Protocol) server for CLI AI agents. Provides a single interface to invoke Codex, Gemini, Claude, and OpenCode CLI tools.
 
 ## Features
