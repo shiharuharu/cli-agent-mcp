@@ -1,0 +1,53 @@
+{
+  "cli": "gemini",
+  "prompt": "List the files in the current directory and describe what you see.",
+  "timestamp": "2025-12-16T13:42:51.072938",
+  "returncode": 144,
+  "events": [
+    {
+      "type": "init",
+      "timestamp": "2025-12-16T05:42:44.996Z",
+      "session_id": "e7655b27-a825-4e3d-94e9-2c43a1f676b1",
+      "model": "gemini-3-pro-preview"
+    },
+    {
+      "type": "message",
+      "timestamp": "2025-12-16T05:42:44.999Z",
+      "role": "user",
+      "content": "List the files in the current directory and describe what you see."
+    },
+    {
+      "type": "tool_use",
+      "timestamp": "2025-12-16T05:42:50.318Z",
+      "tool_name": "list_directory",
+      "tool_id": "list_directory-1765863770318-f3113670ca35d",
+      "parameters": {
+        "dir_path": "."
+      }
+    },
+    {
+      "type": "tool_result",
+      "timestamp": "2025-12-16T05:42:50.368Z",
+      "tool_id": "list_directory-1765863770318-f3113670ca35d",
+      "status": "success",
+      "output": "Listed 1 item(s)."
+    },
+    {
+      "type": "result",
+      "timestamp": "2025-12-16T05:42:51.025Z",
+      "status": "error",
+      "error": {
+        "type": "Error",
+        "message": "[API Error: {\"error\":{\"message\":\"{\\\"error\\\":{\\\"message\\\":\\\"Invalid JSON payload received. Unknown name \\\\\\\"id\\\\\\\" at 'contents[3].parts[0].function_response': Cannot find field.\\\",\\\"type\\\":\\\"upstream_error\\\",\\\"param\\\":\\\"\\\",\\\"code\\\":400}}\",\"code\":400,\"status\":\"Bad Request\"}}]"
+      },
+      "stats": {
+        "total_tokens": 5972,
+        "input_tokens": 5852,
+        "output_tokens": 11,
+        "duration_ms": 0,
+        "tool_calls": 1
+      }
+    }
+  ],
+  "stderr": "[STARTUP] StartupProfiler.flush() called with 9 phases\n[STARTUP] Recording metric for phase: cli_startup duration: 54.57925\n[STARTUP] Recording metric for phase: load_settings duration: 1.022209000000089\n[STARTUP] Recording metric for phase: migrate_settings duration: 0.47629200000005767\n[STARTUP] Recording metric for phase: parse_arguments duration: 8.258166000000074\n[STARTUP] Recording metric for phase: load_cli_config duration: 10.481457999999975\n[STARTUP] Recording metric for phase: initialize_app duration: 28.48795800000005\n[STARTUP] Recording metric for phase: authenticate duration: 25.596708000000035\n[STARTUP] Recording metric for phase: discover_tools duration: 3.3772920000000113\n[STARTUP] Recording metric for phase: initialize_mcp_clients duration: 1115.89075\nError when talking to Gemini API Full report available at: /var/folders/s8/9s92yml94jg2j2f9zy65bhw40000gn/T/gemini-client-error-Turn.run-sendMessageStream-2025-12-16T05-42-51-023Z.json\n"
+}

@@ -1,0 +1,32 @@
+{
+  "cli": "codex",
+  "prompt": "Say hello and introduce yourself briefly.",
+  "timestamp": "2025-12-16T13:41:13.234309",
+  "returncode": 0,
+  "events": [
+    {
+      "type": "thread.started",
+      "thread_id": "019b25ad-271b-7d93-9738-9bf9e1fc817a"
+    },
+    {
+      "type": "turn.started"
+    },
+    {
+      "type": "item.completed",
+      "item": {
+        "id": "item_0",
+        "type": "agent_message",
+        "text": "Hello! I’m GPT-5.2 running in the Codex CLI—an AI coding assistant that can read and edit files in your repo, run terminal commands, and help you debug, implement features, and automate workflows."
+      }
+    },
+    {
+      "type": "turn.completed",
+      "usage": {
+        "input_tokens": 8867,
+        "cached_input_tokens": 0,
+        "output_tokens": 50
+      }
+    }
+  ],
+  "stderr": ""
+}
