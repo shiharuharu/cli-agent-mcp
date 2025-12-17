@@ -117,9 +117,9 @@ class ResponseFormatter:
         # 2. 最终答案
         parts.append(self._format_answer(data.answer))
 
-        # 3. 会话 ID（用于继续对话）
+        # 3. 会话 ID（用于继续对话，外部名称为 continuation_id）
         if data.session_id:
-            parts.append(f"  <session_id>{data.session_id}</session_id>")
+            parts.append(f"  <continuation_id>{data.session_id}</continuation_id>")
 
         # 4. 调试信息（debug 时输出）
         if debug and data.debug_info:
