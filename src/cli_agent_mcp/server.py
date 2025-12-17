@@ -154,6 +154,17 @@ COMMON_PROPERTIES = {
         ),
     },
     # === 常用参数 ===
+    "continuation_id": {
+        "type": "string",
+        "default": "",
+        "description": (
+            "Unique conversation ID for multi-turn conversations. "
+            "Pass the continuation_id from a previous response when you need to: "
+            "follow up on a task, ask clarifying questions, or request modifications. "
+            "This preserves full conversation context so the agent can resume seamlessly. "
+            "Leave empty for new conversations."
+        ),
+    },
     "permission": {
         "type": "string",
         "enum": ["read-only", "workspace-write", "unlimited"],
@@ -269,17 +280,8 @@ OPENCODE_PROPERTIES = {
     },
 }
 
-# 末尾参数（不太重要，所有工具共用）
+# 末尾参数（所有工具共用）
 TAIL_PROPERTIES = {
-    "session_id": {
-        "type": "string",
-        "default": "",
-        "description": (
-            "Session ID to continue a previous conversation. "
-            "Reuse the ID from prior tool calls to maintain context. "
-            "Leave empty for new conversations."
-        ),
-    },
     "task_note": {
         "type": "string",
         "default": "",
@@ -301,9 +303,9 @@ def create_tool_schema(cli_type: str) -> dict[str, Any]:
 
     参数顺序：
     1. prompt, workspace (必填)
-    2. permission, model, save_file, full_output (常用)
+    2. continuation_id, permission, model, save_file, full_output (常用)
     3. 特有参数 (image / system_prompt / append_system_prompt / file / agent)
-    4. session_id, task_note, debug (末尾)
+    4. task_note, debug (末尾)
     """
     # 按顺序构建 properties
     properties: dict[str, Any] = {}
@@ -577,12 +579,12 @@ def create_server(
 
 def _build_params(cli_type: str, args: dict[str, Any]):
     """构建 CLI 参数对象。"""
-    # 公共参数
+    # 公共参数（continuation_id 映射到内部的 session_id）
     common = {
         "prompt": args["prompt"],
         "workspace": Path(args["workspace"]),
         "permission": Permission(args.get("permission", "read-only")),
-        "session_id": args.get("session_id", ""),
+        "session_id": args.get("continuation_id", ""),  # 外部 continuation_id → 内部 session_id
         "model": args.get("model", ""),
         "full_output": args.get("full_output", False),
         "task_note": args.get("task_note", ""),
