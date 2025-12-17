@@ -53,6 +53,9 @@ class ResponseData:
     # 最终答案（必须）
     answer: str
 
+    # 会话 ID（用于继续对话）
+    session_id: str = ""
+
     # 中间思考过程（可选，full_output 时使用）
     thought_steps: list[str] = field(default_factory=list)
 
@@ -105,7 +108,7 @@ class ResponseFormatter:
                 debug_info=data.debug_info,
             )
 
-        parts = ["<tool_response>"]
+        parts = ["<response>"]
 
         # 1. 思考过程（full_output 时输出）
         if full_output and data.thought_steps:
@@ -114,11 +117,15 @@ class ResponseFormatter:
         # 2. 最终答案
         parts.append(self._format_answer(data.answer))
 
-        # 3. 调试信息（debug 时输出）
+        # 3. 会话 ID（用于继续对话）
+        if data.session_id:
+            parts.append(f"  <session_id>{data.session_id}</session_id>")
+
+        # 4. 调试信息（debug 时输出）
         if debug and data.debug_info:
             parts.append(self._format_debug_info(data.debug_info))
 
-        parts.append("</tool_response>")
+        parts.append("</response>")
 
         return "\n".join(parts)
 
@@ -210,14 +217,14 @@ class ResponseFormatter:
         Returns:
             XML 格式的错误响应
         """
-        parts = ["<tool_response>"]
+        parts = ["<response>"]
         parts.append(f"  <error>{error}</error>")
 
         # 错误情况下也输出 debug_info（如果开启 debug）
         if debug and debug_info:
             parts.append(self._format_debug_info(debug_info))
 
-        parts.append("</tool_response>")
+        parts.append("</response>")
         return "\n".join(parts)
 
 
