@@ -1,0 +1,67 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cli-agent-mcp"
+version = "0.1.0"
+description = "Unified MCP server for Codex, Gemini, and Claude CLI agents"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "shiharu" }
+]
+keywords = ["mcp", "cli", "agent", "codex", "gemini", "claude"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "mcp>=1.0.0",
+    "pywebview>=5.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[project.scripts]
+cli-agent-mcp = "cli_agent_mcp:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cli_agent_mcp"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/",
+    "shared/",
+    "tests/",
+    "README.md",
+    "LICENSE",
+    "shared_sync.sh",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "integration: Integration tests (run with -m integration)",
+    "timeout: Test timeout in seconds",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]

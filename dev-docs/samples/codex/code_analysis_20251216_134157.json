@@ -1,0 +1,122 @@
+{
+  "cli": "codex",
+  "prompt": "List the files in the current directory and describe what you see.",
+  "timestamp": "2025-12-16T13:42:41.195227",
+  "returncode": 0,
+  "events": [
+    {
+      "type": "thread.started",
+      "thread_id": "019b25ad-f984-7830-b30d-135a58425c39"
+    },
+    {
+      "type": "turn.started"
+    },
+    {
+      "type": "item.completed",
+      "item": {
+        "id": "item_0",
+        "type": "reasoning",
+        "text": "**Preparing to list files**\n\nThe user asked me to list files and describe what I see. I'll use shell commands like `ls` or maybe `tree` for structure. I think running `ls -1` will be straightforward, and I might look for scripts to show names. Opening a README could help too, but I should focus on overall structure rather than specific contents. I’ll consider file types like shell scripts or Python files as I describe them. Let's get started!"
+      }
+    },
+    {
+      "type": "item.started",
+      "item": {
+        "id": "item_1",
+        "type": "command_execution",
+        "command": "/bin/zsh -lc 'ls -la'",
+        "aggregated_output": "",
+        "exit_code": null,
+        "status": "in_progress"
+      }
+    },
+    {
+      "type": "item.completed",
+      "item": {
+        "id": "item_1",
+        "type": "command_execution",
+        "command": "/bin/zsh -lc 'ls -la'",
+        "aggregated_output": "total 16\ndrwxr-xr-x  3 shiharu  staff    96 12 16 13:40 .\ndrwxr-xr-x  6 shiharu  staff   192 12 16 13:40 ..\n-rw-------  1 shiharu  staff  6452 12 16 13:40 collect_samples.py\n",
+        "exit_code": 0,
+        "status": "completed"
+      }
+    },
+    {
+      "type": "item.started",
+      "item": {
+        "id": "item_2",
+        "type": "command_execution",
+        "command": "/bin/zsh -lc \"sed -n '1,200p' collect_samples.py\"",
+        "aggregated_output": "",
+        "exit_code": null,
+        "status": "in_progress"
+      }
+    },
+    {
+      "type": "item.completed",
+      "item": {
+        "id": "item_2",
+        "type": "command_execution",
+        "command": "/bin/zsh -lc \"sed -n '1,200p' collect_samples.py\"",
+        "aggregated_output": "#!/usr/bin/env python3\n\"\"\"CLI Output Collector - Collect CLI outputs for testing.\n\nThis script runs Codex and Gemini CLI with test prompts and saves\nthe JSON stream output as test samples.\n\nUsage:\n    python collect_samples.py [--codex-only | --gemini-only] [--prompt \"custom prompt\"]\n\"\"\"\n\nfrom __future__ import annotations\n\nimport argparse\nimport json\nimport os\nimport subprocess\nimport sys\nfrom datetime import datetime\nfrom pathlib import Path\n\n# Test prompts for different scenarios\nTEST_PROMPTS = {\n    \"simple_greeting\": \"Say hello and introduce yourself briefly.\",\n    \"code_analysis\": \"List the files in the current directory and describe what you see.\",\n    \"file_read\": \"Read the README.md file if it exists, or list what files are available.\",\n}\n\n# Output directory\nSAMPLES_DIR = Path(__file__).parent.parent / \"samples\"\n\n\ndef run_codex(prompt: str, output_file: Path, timeout: int = 60) -> bool:\n    \"\"\"Run Codex CLI and capture JSON output.\n\n    Args:\n        prompt: The prompt to send to Codex\n        output_file: Path to save the output\n        timeout: Maximum execution time in seconds\n\n    Returns:\n        True if successful, False otherwise\n    \"\"\"\n    cmd = [\n        \"codex\", \"exec\",\n        \"--sandbox\", \"read-only\",\n        \"--skip-git-repo-check\",\n        \"--json\",\n        \"--\", prompt\n    ]\n\n    print(f\"Running Codex: {' '.join(cmd[:6])}...\")\n\n    try:\n        result = subprocess.run(\n            cmd,\n            capture_output=True,\n            text=True,\n            timeout=timeout,\n            cwd=Path.cwd(),\n        )\n\n        # Save raw output\n        output_file.parent.mkdir(parents=True, exist_ok=True)\n\n        # Parse and save JSON lines\n        events = []\n        for line in result.stdout.splitlines():\n            line = line.strip()\n            if line:\n                try:\n                    event = json.loads(line)\n                    events.append(event)\n                except json.JSONDecodeError:\n                    events.append({\"_raw\": line})\n\n        with open(output_file, \"w\", encoding=\"utf-8\") as f:\n            json.dump({\n                \"cli\": \"codex\",\n                \"prompt\": prompt,\n                \"timestamp\": datetime.now().isoformat(),\n                \"returncode\": result.returncode,\n                \"events\": events,\n                \"stderr\": result.stderr,\n            }, f, indent=2, ensure_ascii=False)\n\n        print(f\"  Saved {len(events)} events to {output_file}\")\n        return True\n\n    except subprocess.TimeoutExpired:\n        print(f\"  Timeout after {timeout}s\")\n        return False\n    except FileNotFoundError:\n        print(\"  Codex CLI not found\")\n        return False\n    except Exception as e:\n        print(f\"  Error: {e}\")\n        return False\n\n\ndef run_gemini(prompt: str, output_file: Path, timeout: int = 60) -> bool:\n    \"\"\"Run Gemini CLI and capture JSON stream output.\n\n    Args:\n        prompt: The prompt to send to Gemini\n        output_file: Path to save the output\n        timeout: Maximum execution time in seconds\n\n    Returns:\n        True if successful, False otherwise\n    \"\"\"\n    cmd = [\n        \"gemini\",\n        \"-o\", \"stream-json\",\n        prompt\n    ]\n\n    print(f\"Running Gemini: {' '.join(cmd[:3])}...\")\n\n    try:\n        result = subprocess.run(\n            cmd,\n            capture_output=True,\n            text=True,\n            timeout=timeout,\n            cwd=Path.cwd(),\n        )\n\n        # Save raw output\n        output_file.parent.mkdir(parents=True, exist_ok=True)\n\n        # Parse and save JSON lines\n        events = []\n        for line in result.stdout.splitlines():\n            line = line.strip()\n            if line:\n                try:\n                    event = json.loads(line)\n                    events.append(event)\n                except json.JSONDecodeError:\n                    events.append({\"_raw\": line})\n\n        with open(output_file, \"w\", encoding=\"utf-8\") as f:\n            json.dump({\n                \"cli\": \"gemini\",\n                \"prompt\": prompt,\n                \"timestamp\": datetime.now().isoformat(),\n                \"returncode\": result.returncode,\n                \"events\": events,\n                \"stderr\": result.stderr,\n            }, f, indent=2, ensure_ascii=False)\n\n        print(f\"  Saved {len(events)} events to {output_file}\")\n        return True\n\n    except subprocess.TimeoutExpired:\n        print(f\"  Timeout after {timeout}s\")\n        return False\n    except FileNotFoundError:\n        print(\"  Gemini CLI not found\")\n        return False\n    except Exception as e:\n        print(f\"  Error: {e}\")\n        return False\n\n\ndef main():\n    parser = argparse.ArgumentParser(description=\"Collect CLI output samples\")\n    parser.add_argument(\"--codex-only\", action=\"store_true\", help=\"Only run Codex CLI\")\n    parser.add_argument(\"--gemini-only\", action=\"store_true\", help=\"Only run Gemini CLI\")\n    parser.add_argument(\"--prompt\", type=str, help=\"Custom prompt to use\")\n    parser.add_argument(\"--timeout\", type=int, default=120, help=\"Timeout in seconds\")\n    parser.add_argument(\"--scenario\", type=str, choices=list(TEST_PROMPTS.keys()),\n                        help=\"Use a predefined test scenario\")\n    args = parser.parse_args()\n\n    # Determine which CLIs to run\n    run_codex_cli = not args.gemini_only\n    run_gemini_cli = not args.codex_only\n\n    # Determine prompt\n    if args.prompt:\n        prompts = {\"custom\": args.prompt}\n    elif args.scenario:\n        prompts = {args.scenario: TEST_PROMPTS[args.scenario]}\n    else:\n        prompts = TEST_PROMPTS\n\n    print(f\"Output directory: {SAMPLES_DIR}\")\n    print(f\"Running: {'Codex' if run_codex_cli else ''} {'Gemini' if run_gemini_cli else ''}\")\n    print()\n\n    # Run tests\n    timestamp = datetime.now().strftime(\"%Y%m%d_%H%M%S\")\n\n    for scenario_name, prompt in prompts.items():\n        print(f\"\\n=== Scenario: {scenario_name} ===\")\n        print(f\"Prompt: {prompt[:50]}...\" if len(prompt) > 50 else f\"Prompt: {prompt}\")\n\n        if run_codex_cli:\n            output_file = SAMPLES_DIR / \"codex\" / f\"{scenario_name}_{timestamp}.json\"\n",
+        "exit_code": 0,
+        "status": "completed"
+      }
+    },
+    {
+      "type": "item.completed",
+      "item": {
+        "id": "item_3",
+        "type": "reasoning",
+        "text": "**Describing the Python script**\n\nThe user asked for a list of files and to describe what I see. I already know there's one Python script. I can mention that it collects CLI outputs for testing and uses Codex CLI and Gemini CLI. It runs some prompts, including the current prompt, and saves JSON lines to the dev-docs/samples, which is a good description. I’ll take a look at the rest to see the sample path and understand how it works."
+      }
+    },
+    {
+      "type": "item.started",
+      "item": {
+        "id": "item_4",
+        "type": "command_execution",
+        "command": "/bin/zsh -lc \"sed -n '200,400p' collect_samples.py\"",
+        "aggregated_output": "",
+        "exit_code": null,
+        "status": "in_progress"
+      }
+    },
+    {
+      "type": "item.completed",
+      "item": {
+        "id": "item_4",
+        "type": "command_execution",
+        "command": "/bin/zsh -lc \"sed -n '200,400p' collect_samples.py\"",
+        "aggregated_output": "            output_file = SAMPLES_DIR / \"codex\" / f\"{scenario_name}_{timestamp}.json\"\n            run_codex(prompt, output_file, timeout=args.timeout)\n\n        if run_gemini_cli:\n            output_file = SAMPLES_DIR / \"gemini\" / f\"{scenario_name}_{timestamp}.json\"\n            run_gemini(prompt, output_file, timeout=args.timeout)\n\n    print(\"\\n=== Collection complete ===\")\n    print(f\"Samples saved to: {SAMPLES_DIR}\")\n\n\nif __name__ == \"__main__\":\n    main()\n",
+        "exit_code": 0,
+        "status": "completed"
+      }
+    },
+    {
+      "type": "item.completed",
+      "item": {
+        "id": "item_5",
+        "type": "reasoning",
+        "text": "**Clarifying directory contents**\n\nI want to clarify that the directory contains one file: collect_samples.py, which is a Python 3 script, 6.4KB in size, with permissions set to 600. This means only the user has read and write access. It's designed to collect JSON stream outputs from Codex and Gemini CLIs for specific prompts and save samples to dev-docs/samples/. I should also note that there are no subdirectories, and the results of `ls` show only three entries. That should be sufficient to convey!"
+      }
+    },
+    {
+      "type": "item.completed",
+      "item": {
+        "id": "item_6",
+        "type": "agent_message",
+        "text": "Current directory contains a single file:\n\n- `collect_samples.py` (Python 3 script, ~6.4KB, permissions `-rw-------`): runs `codex exec` and/or `gemini -o stream-json` against a few predefined prompts (including this one) and writes the captured JSON events into `dev-docs/samples/` under `codex/` and `gemini/`."
+      }
+    },
+    {
+      "type": "turn.completed",
+      "usage": {
+        "input_tokens": 40587,
+        "cached_input_tokens": 0,
+        "output_tokens": 1238
+      }
+    }
+  ],
+  "stderr": ""
+}

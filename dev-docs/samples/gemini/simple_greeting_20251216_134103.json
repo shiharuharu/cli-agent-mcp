@@ -1,0 +1,40 @@
+{
+  "cli": "gemini",
+  "prompt": "Say hello and introduce yourself briefly.",
+  "timestamp": "2025-12-16T13:41:33.906660",
+  "returncode": 0,
+  "events": [
+    {
+      "type": "init",
+      "timestamp": "2025-12-16T05:41:16.835Z",
+      "session_id": "d6336abb-88c7-496e-bec4-adca188152b4",
+      "model": "gemini-3-pro-preview"
+    },
+    {
+      "type": "message",
+      "timestamp": "2025-12-16T05:41:16.835Z",
+      "role": "user",
+      "content": "Say hello and introduce yourself briefly."
+    },
+    {
+      "type": "message",
+      "timestamp": "2025-12-16T05:41:33.842Z",
+      "role": "assistant",
+      "content": "Hello. I am the Gemini CLI agent, a specialized software engineering assistant designed to help you efficiently with your coding tasks. I am ready to assist you.",
+      "delta": true
+    },
+    {
+      "type": "result",
+      "timestamp": "2025-12-16T05:41:33.855Z",
+      "status": "success",
+      "stats": {
+        "total_tokens": 6195,
+        "input_tokens": 5846,
+        "output_tokens": 31,
+        "duration_ms": 17020,
+        "tool_calls": 0
+      }
+    }
+  ],
+  "stderr": "[STARTUP] StartupProfiler.flush() called with 9 phases\n[STARTUP] Recording metric for phase: cli_startup duration: 56.18495800000005\n[STARTUP] Recording metric for phase: load_settings duration: 1.1478329999999914\n[STARTUP] Recording metric for phase: migrate_settings duration: 0.5638749999999391\n[STARTUP] Recording metric for phase: parse_arguments duration: 7.469375000000014\n[STARTUP] Recording metric for phase: load_cli_config duration: 12.108040999999957\n[STARTUP] Recording metric for phase: initialize_app duration: 28.540791000000013\n[STARTUP] Recording metric for phase: authenticate duration: 25.958708\n[STARTUP] Recording metric for phase: discover_tools duration: 3.2799170000000686\n[STARTUP] Recording metric for phase: initialize_mcp_clients duration: 971.586583\n"
+}
