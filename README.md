@@ -19,7 +19,10 @@ uvx cli-agent-mcp
 # Install from GitHub
 uvx --from git+https://github.com/shiharuharu/cli-agent-mcp.git cli-agent-mcp
 
-# Install from source
+# Install from source (editable mode for development)
+uvx --from /path/to/cli-agent-mcp cli-agent-mcp
+
+# Or use pip
 pip install -e .
 ```
 
