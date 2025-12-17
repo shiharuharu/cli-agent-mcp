@@ -12,6 +12,10 @@ Unified MCP (Model Context Protocol) server for CLI AI agents. Provides a single
 - **Signal Handling**: Graceful cancellation via SIGINT without killing the server
 - **Debug Logging**: Comprehensive subprocess output capture for debugging
 
+## Screenshot
+
+![CLI Agent MCP GUI](dev-docs/screenshot/screenshot.png)
+
 ## Installation
 
 ```bash
