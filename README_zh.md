@@ -12,6 +12,10 @@
 - **信号处理**：通过 SIGINT 优雅取消，不会终止服务器
 - **调试日志**：全面的子进程输出捕获，便于调试
 
+## 截图
+
+![CLI Agent MCP GUI](dev-docs/screenshot/screenshot.png)
+
 ## 安装
 
 ```bash
