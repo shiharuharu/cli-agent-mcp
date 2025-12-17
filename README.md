@@ -13,11 +13,14 @@ Unified MCP (Model Context Protocol) server for CLI AI agents. Provides a single
 ## Installation
 
 ```bash
+# Install from PyPI (when published)
+uvx cli-agent-mcp
+
+# Install from GitHub
+uvx --from git+https://github.com/shiharuharu/cli-agent-mcp.git cli-agent-mcp
+
 # Install from source
 pip install -e .
-
-# Or use uvx
-uvx cli-agent-mcp
 ```
 
 ## Configuration
@@ -152,7 +155,60 @@ Debug output includes:
 
 ## MCP Configuration
 
-Add to your MCP client configuration:
+Add to your MCP client configuration (e.g., Claude Desktop `claude_desktop_config.json`):
+
+### Basic Configuration
+
+```json
+{
+  "mcpServers": {
+    "cli-agent-mcp": {
+      "command": "uvx",
+      "args": ["cli-agent-mcp"]
+    }
+  }
+}
+```
+
+### Install from GitHub
+
+```json
+{
+  "mcpServers": {
+    "cli-agent-mcp": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/shiharuharu/cli-agent-mcp.git",
+        "cli-agent-mcp"
+      ]
+    }
+  }
+}
+```
+
+### With Debug Mode
+
+```json
+{
+  "mcpServers": {
+    "cli-agent-mcp": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/shiharuharu/cli-agent-mcp.git",
+        "cli-agent-mcp"
+      ],
+      "env": {
+        "CAM_DEBUG": "true",
+        "CAM_LOG_DEBUG": "true"
+      }
+    }
+  }
+}
+```
+
+### Disable GUI
 
 ```json
 {
@@ -161,8 +217,23 @@ Add to your MCP client configuration:
       "command": "uvx",
       "args": ["cli-agent-mcp"],
       "env": {
-        "CAM_DEBUG": "true",
-        "CAM_LOG_DEBUG": "true"
+        "CAM_GUI": "false"
+      }
+    }
+  }
+}
+```
+
+### Limit Available Tools
+
+```json
+{
+  "mcpServers": {
+    "cli-agent-mcp": {
+      "command": "uvx",
+      "args": ["cli-agent-mcp"],
+      "env": {
+        "CAM_TOOLS": "claude,gemini"
       }
     }
   }
