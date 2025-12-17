@@ -284,8 +284,9 @@ class TestProcessIsolation:
     async def test_process_group_posix(self, temp_workspace: Path, runner: ProcessRunner):
         """Test that process is its own process group leader on POSIX."""
         # Process group ID should equal PID when start_new_session=True
+        # Use Python to reliably get pgid since ps output format varies across systems
         spec = ProcessSpec(
-            argv=["sh", "-c", "echo pid=$$ pgid=$(ps -o pgid= -p $$)"],
+            argv=["python3", "-c", "import os; print(f'pid={os.getpid()} pgid={os.getpgid(0)}')"],
             cwd=temp_workspace,
         )
 

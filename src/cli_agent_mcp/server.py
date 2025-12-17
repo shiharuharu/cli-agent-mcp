@@ -503,6 +503,7 @@ def create_server(
             # 构建 ResponseData（直接使用 invoker 提取的统一数据）
             response_data = ResponseData(
                 answer=result.agent_messages if result.success else "",
+                session_id=result.session_id or "",
                 thought_steps=result.thought_steps if full_output else [],
                 debug_info=debug_info,
                 success=result.success,
