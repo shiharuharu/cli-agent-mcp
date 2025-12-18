@@ -138,10 +138,15 @@ COMMON_PROPERTIES = {
     "prompt": {
         "type": "string",
         "description": (
-            "Detailed task instruction for the agent. "
-            "Include specific file paths, function names, or error messages when available. "
-            "Be explicit about scope and constraints to avoid over-engineering. "
-            "Example: 'Fix the TypeError in utils.py:42, only modify that function'"
+            "Task instruction for the agent. "
+            "IMPORTANT: This agent has NO memory of previous calls - each call starts fresh. "
+            "When starting a NEW conversation (no continuation_id), include ALL relevant context:\n"
+            "- Background: What problem are you solving? What's the goal?\n"
+            "- Specifics: File paths, function names, error messages, code snippets\n"
+            "- Constraints: What to avoid, scope limits, patterns to follow\n"
+            "- Prior findings: Relevant discoveries from your own analysis\n"
+            "When CONTINUING a conversation (with continuation_id), you can be brief - "
+            "the agent retains context from that session."
         ),
     },
     "workspace": {
@@ -159,10 +164,11 @@ COMMON_PROPERTIES = {
         "default": "",
         "description": (
             "Unique conversation ID for multi-turn conversations. "
-            "Pass the continuation_id from a previous response when you need to: "
-            "follow up on a task, ask clarifying questions, or request modifications. "
-            "This preserves full conversation context so the agent can resume seamlessly. "
-            "Leave empty for new conversations."
+            "When provided, the agent retains full context from that session, "
+            "so your prompt can be brief (e.g., 'now fix the second issue'). "
+            "When empty, this is a NEW conversation - make your prompt self-contained "
+            "with all necessary context since the agent has no memory of prior calls. "
+            "Get this ID from the <continuation_id> field in previous responses."
         ),
     },
     "permission": {
