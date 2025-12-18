@@ -504,14 +504,17 @@ def create_server(
             save_file_path = arguments.get("save_file", "")
             save_file_with_prompt = arguments.get("save_file_with_prompt", False)
             if save_file_path and save_file_with_prompt:
-                # 注入提示词，告知模型详细描述分析过程
+                # 注入提示词，强制模型输出详细的分析报告
                 injection_note = (
                     "\n\n---\n"
-                    "Note: Your response will be automatically saved to an external file. "
-                    "Please verbalize your analysis process and insights in detail as you work. "
-                    "Describe what you're examining, what patterns you notice, "
-                    "and explain your reasoning for each finding. "
-                    "This detailed commentary will be preserved in the saved output."
+                    "OUTPUT REQUIREMENTS: This response will be saved as a standalone document. "
+                    "Write as a comprehensive analysis report that can be understood WITHOUT any prior context. "
+                    "You MUST structure your response to include:\n"
+                    "1. **Summary**: Key findings and conclusions upfront\n"
+                    "2. **Analysis**: Detailed examination with evidence and reasoning\n"
+                    "3. **Specifics**: Code references, file paths, line numbers where relevant\n"
+                    "4. **Recommendations**: Actionable next steps if applicable\n"
+                    "Do NOT write terse responses. Explain your reasoning as you work through the analysis."
                 )
                 arguments = {**arguments, "prompt": arguments["prompt"] + injection_note}
 
