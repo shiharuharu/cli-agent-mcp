@@ -203,16 +203,6 @@ COMMON_PROPERTIES = {
             "file operations are still governed by the 'permission' parameter."
         ),
     },
-    "report_mode": {
-        "type": "boolean",
-        "default": False,
-        "description": (
-            "Enable report mode for comprehensive, standalone output. "
-            "Injects formatting guidance asking the model to produce detailed, "
-            "self-contained analysis that can be understood without conversation context. "
-            "Useful for generating analysis reports, documentation, or shareable summaries."
-        ),
-    },
     "save_file_with_wrapper": {
         "type": "boolean",
         "default": False,
@@ -238,6 +228,16 @@ COMMON_PROPERTIES = {
             "Return detailed output including reasoning and tool calls. "
             "Recommended for Gemini research/analysis tasks. "
             "Default: false (concise output)"
+        ),
+    },
+    "report_mode": {
+        "type": "boolean",
+        "default": False,
+        "description": (
+            "Enable report mode for comprehensive, standalone output. "
+            "Injects formatting guidance asking the model to produce detailed, "
+            "self-contained analysis that can be understood without conversation context. "
+            "Useful for generating analysis reports, documentation, or shareable summaries."
         ),
     },
     "context_paths": {
