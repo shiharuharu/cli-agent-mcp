@@ -59,6 +59,7 @@ def _gui_process_entry(
     shutdown_event: mp.Event,
     startup_complete: mp.Event,
     heartbeat_queue: mp.Queue | None,  # None 表示禁用心跳检测 (KEEP_GUI=true)
+    url_queue: mp.Queue,  # 用于传回 GUI URL
     config_dict: dict,
 ) -> None:
     """GUI 子进程入口。
@@ -89,6 +90,22 @@ def _gui_process_entry(
 
     # 创建 viewer
     viewer = LiveViewer(ViewerConfig(title=title, multi_source_mode=True))
+
+    # 启动后传回 URL（在 viewer.start() 之前设置回调）
+    def send_url_on_start():
+        if viewer.url:
+            try:
+                url_queue.put_nowait(viewer.url)
+                logger.info(f"GUI URL: {viewer.url}")
+            except Exception:
+                pass
+
+    # 注册启动回调
+    original_started_set = viewer._started.set
+    def started_set_with_url():
+        original_started_set()
+        send_url_on_start()
+    viewer._started.set = started_set_with_url
 
     # 状态
     should_exit = threading.Event()
@@ -184,8 +201,12 @@ class GUIManager:
         self._process: mp.Process | None = None
         self._event_queue: mp.Queue | None = None
         self._heartbeat_queue: mp.Queue | None = None
+        self._url_queue: mp.Queue | None = None
         self._shutdown_event: mp.Event | None = None
         self._startup_complete: mp.Event | None = None
+
+        # GUI URL
+        self._url: str | None = None
 
         # 状态
         self._running = False
@@ -248,6 +269,7 @@ class GUIManager:
                 # 创建 IPC 资源
                 self._event_queue = mp.Queue(maxsize=5000)
                 self._heartbeat_queue = mp.Queue(maxsize=10)
+                self._url_queue = mp.Queue(maxsize=1)
                 self._shutdown_event = mp.Event()
                 self._startup_complete = mp.Event()
 
@@ -301,6 +323,7 @@ class GUIManager:
                     self._shutdown_event,
                     self._startup_complete,
                     heartbeat_queue,
+                    self._url_queue,
                     config_dict,
                 ),
                 daemon=False,  # 不自动随主进程死亡
@@ -314,7 +337,14 @@ class GUIManager:
                 self._terminate_process()
                 return False
 
-            logger.info(f"GUI process started (PID: {self._process.pid}, heartbeat={'disabled' if self.config.keep_on_exit else 'enabled'})")
+            # 获取 GUI URL
+            try:
+                self._url = self._url_queue.get(timeout=2)
+                logger.debug(f"GUI URL received: {self._url}")
+            except queue.Empty:
+                logger.warning("Failed to get GUI URL")
+
+            logger.info(f"GUI process started (PID: {self._process.pid}, URL: {self._url}, heartbeat={'disabled' if self.config.keep_on_exit else 'enabled'})")
             return True
 
         except Exception as e:
@@ -388,6 +418,7 @@ class GUIManager:
         # 重建 IPC 资源（旧的可能已损坏）
         self._event_queue = mp.Queue(maxsize=5000)
         self._heartbeat_queue = mp.Queue(maxsize=10)
+        self._url_queue = mp.Queue(maxsize=1)
         self._shutdown_event = mp.Event()
         self._startup_complete = mp.Event()
 
@@ -473,3 +504,8 @@ class GUIManager:
             and self._process is not None
             and self._process.is_alive()
         )
+
+    @property
+    def url(self) -> str | None:
+        """获取 GUI URL。"""
+        return self._url

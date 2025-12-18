@@ -1,9 +1,9 @@
 """pywebview 窗口管理。
 
-cli-agent-mcp shared/gui v0.1.0
-同步日期: 2025-12-16
+cli-agent-mcp shared/gui v0.2.0
+同步日期: 2025-12-18
 
-提供 pywebview 窗口和 Queue 通信机制。
+提供 pywebview 窗口和 Queue 通信机制，支持 HTTP + SSE 降级。
 
 Example:
     # 基本用法（单端模式）
@@ -18,15 +18,17 @@ Example:
 
 from __future__ import annotations
 
-import json
 import logging
+import os
 import queue
+import sys
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from .renderer import EventRenderer, RenderConfig
+from .server import GUIServer, ServerConfig
 from .template import generate_html
 
 logger = logging.getLogger(__name__)
@@ -113,6 +115,11 @@ class LiveViewer:
         self._closed = threading.Event()
         self._poll_thread: threading.Thread | None = None
 
+        # HTTP 服务器
+        self._server: GUIServer | None = None
+        self._url: str | None = None
+        self._webview_available: bool = False
+
         # 统计
         self._stats = {
             "model": None,
@@ -121,6 +128,16 @@ class LiveViewer:
             "duration": 0.0,
             "tools": 0,
         }
+
+    @property
+    def url(self) -> str | None:
+        """获取 GUI URL"""
+        return self._url
+
+    @property
+    def is_webview_mode(self) -> bool:
+        """是否使用 pywebview 模式"""
+        return self._webview_available and self._window is not None
 
     def start(self, blocking: bool = True) -> None:
         """启动查看器。
@@ -136,58 +153,105 @@ class LiveViewer:
             # 等待窗口准备好
             self._started.wait(timeout=10)
 
-    def _run(self) -> None:
-        """运行 pywebview 主循环。"""
-        try:
-            import webview
-        except ImportError as e:
-            raise ImportError(
-                "pywebview is required for GUI. Install with: pip install pywebview"
-            ) from e
+    def _check_gui_available(self) -> bool:
+        """检查 GUI 环境是否可用（Linux/WSL2 特殊处理）"""
+        if sys.platform == "linux":
+            if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+                logger.info("No DISPLAY/WAYLAND_DISPLAY, GUI not available")
+                return False
+        return True
 
+    def _run(self) -> None:
+        """运行主循环"""
         html = generate_html(
             multi_source_mode=self.config.multi_source_mode,
             title=self.config.title,
         )
 
-        self._window = webview.create_window(
-            self.config.title,
-            html=html,
-            width=self.config.width,
-            height=self.config.height,
-            min_size=(600, 400),
+        # 启动 HTTP 服务器
+        server_config = ServerConfig(
+            host=os.environ.get("CAM_GUI_HOST", "127.0.0.1"),
+            port=int(os.environ.get("CAM_GUI_PORT", "0")),
         )
+        self._server = GUIServer(html, server_config)
+        self._server.start()
+        self._url = self._server.url
 
-        def on_loaded():
-            self._started.set()
-            # 启动单一后台轮询线程
-            self._poll_thread = threading.Thread(
-                target=self._poll_queue_loop, daemon=True
+        # 注册断开回调
+        self._server.on_all_disconnected(self._on_all_clients_disconnected)
+
+        logger.info(f"GUI available at: {self._url}")
+
+        # 检查 GUI 环境
+        if not self._check_gui_available():
+            self._start_web_only_mode()
+            return
+
+        # 尝试启动 pywebview
+        try:
+            import webview
+            self._window = webview.create_window(
+                self.config.title,
+                url=self._url,
+                width=self.config.width,
+                height=self.config.height,
+                min_size=(600, 400),
             )
-            self._poll_thread.start()
 
-        def on_closed():
-            self._closed.set()
-            self._queue.put(None)  # Signal to stop polling
+            def on_loaded():
+                self._started.set()
+                self._webview_available = True
+                self._poll_thread = threading.Thread(
+                    target=self._poll_queue_loop, daemon=True
+                )
+                self._poll_thread.start()
 
-        self._window.events.loaded += on_loaded
-        self._window.events.closed += on_closed
+            def on_closed():
+                self._closed.set()
+                self._queue.put(None)
 
-        webview.start()
+            self._window.events.loaded += on_loaded
+            self._window.events.closed += on_closed
+
+            webview.start()
+
+        except ImportError:
+            logger.warning(f"pywebview not installed, use browser: {self._url}")
+            self._start_web_only_mode()
+
+        except Exception as e:
+            logger.warning(f"pywebview failed ({e}), falling back to browser: {self._url}")
+            self._start_web_only_mode()
+
+    def _start_web_only_mode(self):
+        """启动纯 Web 模式"""
+        self._webview_available = False
+        self._started.set()
+
+        self._poll_thread = threading.Thread(
+            target=self._poll_queue_loop, daemon=True
+        )
+        self._poll_thread.start()
+
+        self._closed.wait()
+
+    def _on_all_clients_disconnected(self):
+        """所有客户端断开时的回调"""
+        logger.info("All clients disconnected")
+        self._closed.set()
 
     def _poll_queue_loop(self) -> None:
-        """后台轮询线程主循环。使用单一线程避免 Timer 线程爆炸。"""
-        poll_interval = self.config.poll_interval_ms / 1000  # 转换为秒
+        """后台轮询线程主循环 - 不再依赖 self._window"""
+        poll_interval = self.config.poll_interval_ms / 1000
 
-        while not self._closed.is_set() and self._window is not None:
+        while not self._closed.is_set() and self._server is not None:
             try:
-                # 批量处理队列中的所有事件
                 events_processed = 0
-                while events_processed < 100:  # 每次最多处理 100 个事件
+                while events_processed < 100:
                     try:
                         event = self._queue.get_nowait()
                         if event is None:
-                            return  # 收到停止信号
+                            return
                         self._render_event(event)
                         events_processed += 1
                     except queue.Empty:
@@ -196,12 +260,11 @@ class LiveViewer:
             except Exception as e:
                 logger.debug(f"Poll loop error: {e}")
 
-            # 等待下一次轮询
             time.sleep(poll_interval)
 
     def _render_event(self, event: dict[str, Any]) -> None:
-        """渲染单个事件到窗口。"""
-        if self._window is None:
+        """渲染事件 - 通过 SSE 广播"""
+        if self._server is None:
             return
 
         try:
@@ -210,21 +273,18 @@ class LiveViewer:
             source = event.get("source", "unknown")
             task_note = event.get("metadata", {}).get("task_note", "") or event.get("task_note", "")
 
-            # Escape for JS
-            html_escaped = json.dumps(html)
-            session_escaped = json.dumps(session_id)
-            source_escaped = json.dumps(source)
-            task_note_escaped = json.dumps(task_note)
+            # 通过 SSE 广播
+            self._server.broadcast({
+                'type': 'event',
+                'html': html,
+                'session': session_id,
+                'source': source,
+                'task_note': task_note,
+            })
 
-            self._window.evaluate_js(
-                f"addEvent({html_escaped}, {session_escaped}, {source_escaped}, {task_note_escaped})"
-            )
-
-            # Update status
             self._update_stats(event)
 
         except Exception as e:
-            # Log error but don't crash
             logger.warning(f"Render error: {e}")
 
     def _extract_session_id(self, event: dict[str, Any]) -> str:
@@ -235,10 +295,7 @@ class LiveViewer:
         return metadata.get("session_id", "") or metadata.get("thread_id", "")
 
     def _update_stats(self, event: dict[str, Any]) -> None:
-        """更新状态栏统计。"""
-        if self._window is None:
-            return
-
+        """更新状态栏 - 通过 SSE 广播"""
         updated = False
 
         # Model
@@ -280,7 +337,7 @@ class LiveViewer:
         # Streaming indicator
         is_streaming = event.get("is_delta", False) or event.get("status") == "running"
 
-        if updated:
+        if updated and self._server:
             status_data = {
                 "model": self._stats.get("model"),
                 "session": self._stats.get("session"),
@@ -289,10 +346,10 @@ class LiveViewer:
                 "tools": self._stats.get("tools", 0),
                 "streaming": is_streaming,
             }
-            try:
-                self._window.evaluate_js(f"updateStatus({json.dumps(status_data)})")
-            except Exception:
-                pass
+            self._server.broadcast({
+                'type': 'status',
+                'status': status_data,
+            })
 
     def push_event(self, event: dict[str, Any]) -> bool:
         """推送统一事件到显示队列。
@@ -325,12 +382,19 @@ class LiveViewer:
         return count
 
     def close(self) -> None:
-        """关闭查看器窗口。"""
+        """关闭查看器窗口"""
+        self._closed.set()
+
+        # 关闭 pywebview 窗口
         if self._window:
             try:
                 self._window.destroy()
             except Exception:
                 pass
+
+        # 停止 HTTP 服务器
+        if self._server:
+            self._server.stop()
 
     @property
     def is_running(self) -> bool:

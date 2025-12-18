@@ -1,9 +1,9 @@
 """HTML 模板生成。
 
-cli-agent-mcp shared/gui v0.1.0
-同步日期: 2025-12-16
+cli-agent-mcp shared/gui v0.2.0
+同步日期: 2025-12-18
 
-生成带侧边栏的 pywebview HTML 模板。
+生成带侧边栏的 HTML 模板，支持 SSE 事件流。
 """
 
 from __future__ import annotations
@@ -498,6 +498,69 @@ content.addEventListener('scroll', () => {{
         status.classList.add('paused');
     }}
 }});
+
+// ========== updateStatus 函数 ==========
+function updateStatus(status) {{
+    const statusBar = document.getElementById('status-bar');
+    if (!statusBar) return;
+
+    let parts = [];
+    if (status.model) parts.push(`Model: ${{status.model}}`);
+    if (status.session) parts.push(`Session: ${{status.session.slice(0, 8)}}...`);
+    if (status.tokens) parts.push(`Tokens: ${{status.tokens}}`);
+    if (status.duration) parts.push(`Duration: ${{status.duration.toFixed(1)}}s`);
+    if (status.tools) parts.push(`Tools: ${{status.tools}}`);
+    if (status.streaming) parts.push('⏳ Streaming...');
+
+    statusBar.textContent = parts.join(' | ') || 'Ready';
+}}
+
+// ========== SSE 客户端 ==========
+(function() {{
+    let evtSource = null;
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 10;
+
+    function connect() {{
+        evtSource = new EventSource('/sse');
+
+        evtSource.onopen = function() {{
+            console.log('SSE connected');
+            reconnectAttempts = 0;
+        }};
+
+        evtSource.onmessage = function(e) {{
+            try {{
+                const data = JSON.parse(e.data);
+                if (data.type === 'event') {{
+                    addEvent(data.html, data.session, data.source, data.task_note);
+                }} else if (data.type === 'status') {{
+                    updateStatus(data.status);
+                }}
+            }} catch (err) {{
+                console.error('SSE parse error:', err);
+            }}
+        }};
+
+        evtSource.onerror = function() {{
+            console.log('SSE connection lost');
+            evtSource.close();
+
+            if (reconnectAttempts < maxReconnectAttempts) {{
+                reconnectAttempts++;
+                const delay = Math.min(1000 * reconnectAttempts, 10000);
+                console.log(`Reconnecting in ${{delay}}ms (attempt ${{reconnectAttempts}})`);
+                setTimeout(connect, delay);
+            }}
+        }};
+    }}
+
+    connect();
+
+    window.addEventListener('beforeunload', function() {{
+        if (evtSource) evtSource.close();
+    }});
+}})();
 </script>
 </body>
 </html>'''

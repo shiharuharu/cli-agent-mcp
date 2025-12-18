@@ -203,14 +203,14 @@ COMMON_PROPERTIES = {
             "file operations are still governed by the 'permission' parameter."
         ),
     },
-    "save_file_with_prompt": {
+    "report_mode": {
         "type": "boolean",
         "default": False,
         "description": (
-            "When true AND save_file is set, injects a note into the prompt "
-            "asking the model to verbalize its analysis and insights. "
-            "The model's detailed reasoning will be automatically saved to the file. "
-            "Useful for generating comprehensive analysis reports."
+            "Enable report mode for comprehensive, standalone output. "
+            "Injects formatting guidance asking the model to produce detailed, "
+            "self-contained analysis that can be understood without conversation context. "
+            "Useful for generating analysis reports, documentation, or shareable summaries."
         ),
     },
     "save_file_with_wrapper": {
@@ -451,6 +451,15 @@ def create_server(
                         inputSchema=create_tool_schema(cli_type),
                     )
                 )
+        # 添加 get_gui_url 工具
+        if gui_manager:
+            tools.append(
+                Tool(
+                    name="get_gui_url",
+                    description="Get the GUI dashboard URL. Returns the HTTP URL where the live event viewer is accessible.",
+                    inputSchema={"type": "object", "properties": {}, "required": []},
+                )
+            )
         # DEBUG: 记录工具列表请求（通常是客户端初始化后的第一个调用）
         logger.debug(
             f"[MCP] list_tools called, returning {len(tools)} tools: "
@@ -468,6 +477,12 @@ def create_server(
             f"  Arguments: {json.dumps({k: v[:100] + '...' if isinstance(v, str) and len(v) > 100 else v for k, v in arguments.items()}, ensure_ascii=False, default=str)}"
         )
         logger.debug(f"call_tool: name={name}, registry={registry is not None}")
+
+        # 处理 get_gui_url 工具
+        if name == "get_gui_url":
+            if gui_manager and gui_manager.url:
+                return [TextContent(type="text", text=gui_manager.url)]
+            return [TextContent(type="text", text="GUI not available or URL not ready")]
 
         if not config.is_tool_allowed(name):
             return [TextContent(type="text", text=f"Error: Tool '{name}' is not enabled")]
@@ -500,26 +515,27 @@ def create_server(
             logger.debug(f"No registry available")
 
         try:
-            # 处理 save_file_with_prompt：注入输出格式要求
-            save_file_path = arguments.get("save_file", "")
-            save_file_with_prompt = arguments.get("save_file_with_prompt", False)
-            if save_file_path and save_file_with_prompt:
+            # 处理 report_mode：注入输出格式要求
+            report_mode = arguments.get("report_mode", False)
+            if report_mode:
                 injection_note = """
 
-<mcp-injection type="output-format">
+<mcp-injection type="report-mode">
   <output-requirements>
-    <rule>This response will be saved as a standalone document.</rule>
+    <rule>Produce a comprehensive, standalone response.</rule>
     <rule>Write so it can be understood WITHOUT any prior conversation context.</rule>
     <rule>Do NOT reference "above", "previous messages", or "as discussed".</rule>
     <rule>Use the same language as the user's request.</rule>
+    <rule>Include relevant details, evidence, and reasoning.</rule>
   </output-requirements>
-  <structure>
-    <section name="Summary">3-7 bullet points with key findings and conclusions</section>
-    <section name="Context">Restate the task/problem so readers understand without chat history</section>
-    <section name="Analysis">Step-by-step reasoning with evidence; include file:line references where relevant</section>
-    <section name="Recommendations">Actionable next steps ordered by priority</section>
-  </structure>
-  <note>Write with enough detail to be useful standalone, but avoid unnecessary filler.</note>
+  <guidelines>
+    <guideline>Start with key findings or conclusions</guideline>
+    <guideline>Provide context so readers understand the problem/task</guideline>
+    <guideline>Include step-by-step reasoning with evidence where relevant</guideline>
+    <guideline>Reference specific files/lines when discussing code</guideline>
+    <guideline>End with actionable recommendations if applicable</guideline>
+  </guidelines>
+  <note>Be thorough but avoid unnecessary filler. Quality over quantity.</note>
 </mcp-injection>"""
                 arguments = {**arguments, "prompt": arguments["prompt"] + injection_note}
 
@@ -720,16 +736,30 @@ async def run_server() -> None:
     if config.gui_enabled:
         # 创建日志通知推送函数（用于首次启动和重启时）
         def push_log_debug_notice():
-            if gui_manager and config.log_debug and config.log_file:
-                gui_manager.push_event({
-                    "category": "system",
-                    "source": "server",
-                    "message": f"Debug log: {config.log_file}",
-                    "severity": "info",
-                    "content_type": "text",
-                    "timestamp": time.time(),
-                    "raw": {"type": "system", "subtype": "log_path", "path": config.log_file},
-                })
+            if gui_manager:
+                # 推送 GUI URL
+                if gui_manager.url:
+                    logger.debug(f"GUI URL: {gui_manager.url}")
+                    gui_manager.push_event({
+                        "category": "system",
+                        "source": "server",
+                        "message": f"GUI URL: {gui_manager.url}",
+                        "severity": "info",
+                        "content_type": "text",
+                        "timestamp": time.time(),
+                        "raw": {"type": "system", "subtype": "gui_url", "url": gui_manager.url},
+                    })
+                # 推送日志路径
+                if config.log_debug and config.log_file:
+                    gui_manager.push_event({
+                        "category": "system",
+                        "source": "server",
+                        "message": f"Debug log: {config.log_file}",
+                        "severity": "info",
+                        "content_type": "text",
+                        "timestamp": time.time(),
+                        "raw": {"type": "system", "subtype": "log_path", "path": config.log_file},
+                    })
 
         gui_manager = GUIManager(
             GUIConfig(
