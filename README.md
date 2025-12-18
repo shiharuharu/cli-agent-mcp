@@ -4,6 +4,21 @@
 
 Unified MCP (Model Context Protocol) server for CLI AI agents. Provides a single interface to invoke Codex, Gemini, Claude, and OpenCode CLI tools.
 
+## Why cli-agent-mcp?
+
+This is more than a CLI wrapper — it's an **orchestration pattern** for multi-model collaboration.
+
+**Can't articulate your requirements clearly?** Let Claude orchestrate. Describe what you want, and it will decompose your vague idea into concrete tasks for the right agent. The act of delegation forces clarity.
+
+**Planning a grand product vision?** Each model brings a unique lens:
+- **Codex**: The critic. Its analytical eye catches what you missed, challenges assumptions, finds edge cases.
+- **Gemini**: The creative. Divergent thinking, unexpected connections, the spark you didn't know you needed.
+- **Claude**: The scribe. Faithful execution, clear documentation, turning ideas into working code.
+
+**Want persistent results?** Use `save_file` to capture agent outputs, then let Claude synthesize insights across multiple analyses.
+
+We don't just wrap CLIs — we provide a **thinking framework** for human-AI collaboration.
+
 ## Features
 
 - **Unified Interface**: Single MCP server exposing multiple CLI agents
