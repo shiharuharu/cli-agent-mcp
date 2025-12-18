@@ -160,32 +160,61 @@ pip install -e .
 
 ## 提示词注入
 
-部分参数会自动向提示词注入额外内容：
+部分参数会自动向提示词注入额外内容，使用 `<mcp-injection>` XML 标签。这些标签便于调试和定位系统注入的内容。
 
 ### `save_file_with_prompt`
 
-当同时设置 `save_file` 和 `save_file_with_prompt` 时，会追加说明：
+当同时设置 `save_file` 和 `save_file_with_prompt` 时，会注入输出格式要求：
 
-```
+```xml
 <你的提示词>
 
----
-Note: Your response will be automatically saved to an external file.
-Please verbalize your analysis process and insights in detail as you work...
+<mcp-injection type="output-format">
+  <output-requirements>
+    <rule>This response will be saved as a standalone document.</rule>
+    <rule>Write so it can be understood WITHOUT any prior conversation context.</rule>
+    <rule>Do NOT reference "above", "previous messages", or "as discussed".</rule>
+    <rule>Use the same language as the user's request.</rule>
+  </output-requirements>
+  <structure>
+    <section name="Summary">3-7 bullet points with key findings and conclusions</section>
+    <section name="Context">Restate the task/problem so readers understand without chat history</section>
+    <section name="Analysis">Step-by-step reasoning with evidence; include file:line references</section>
+    <section name="Recommendations">Actionable next steps ordered by priority</section>
+  </structure>
+  <note>Write with enough detail to be useful standalone, but avoid unnecessary filler.</note>
+</mcp-injection>
 ```
 
 ### `context_paths`
 
-当提供 `context_paths` 时，会追加参考路径：
+当提供 `context_paths` 时，会注入参考路径：
 
-```
+```xml
 <你的提示词>
 
----
-Reference Paths:
-- /src/api/handlers.py
-- /config/settings.json
+<mcp-injection type="reference-paths">
+  <description>
+    These paths are provided as reference for project structure.
+    You may use them to understand naming conventions and file organization.
+  </description>
+  <paths>
+    <path>/src/api/handlers.py</path>
+    <path>/config/settings.json</path>
+  </paths>
+</mcp-injection>
 ```
+
+## 无状态设计
+
+**重要**：每次工具调用都是无状态的 - agent 没有之前调用的记忆。
+
+- **新对话**（无 `continuation_id`）：在提示词中包含所有相关上下文 - 背景、具体细节、约束条件和之前的发现。
+- **继续对话**（有 `continuation_id`）：agent 保留该会话的上下文，所以可以简洁描述。
+
+如果你的请求引用了之前的上下文（如"修复那个 bug"、"继续之前的工作"），你必须：
+1. 提供之前响应中的 `continuation_id`，或
+2. 将引用展开为具体细节
 
 ## 文件输出选项
 

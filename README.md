@@ -160,32 +160,61 @@ Invoke OpenCode CLI agent for full-stack development.
 
 ## Prompt Injection
 
-Some parameters automatically inject additional content into the prompt:
+Some parameters automatically inject additional content into the prompt using `<mcp-injection>` XML tags. These tags make it easy to debug and identify system-injected content.
 
 ### `save_file_with_prompt`
 
-When `save_file` and `save_file_with_prompt` are both set, a note is appended:
+When `save_file` and `save_file_with_prompt` are both set, output format requirements are injected:
 
-```
+```xml
 <your prompt>
 
----
-Note: Your response will be automatically saved to an external file.
-Please verbalize your analysis process and insights in detail as you work...
+<mcp-injection type="output-format">
+  <output-requirements>
+    <rule>This response will be saved as a standalone document.</rule>
+    <rule>Write so it can be understood WITHOUT any prior conversation context.</rule>
+    <rule>Do NOT reference "above", "previous messages", or "as discussed".</rule>
+    <rule>Use the same language as the user's request.</rule>
+  </output-requirements>
+  <structure>
+    <section name="Summary">3-7 bullet points with key findings and conclusions</section>
+    <section name="Context">Restate the task/problem so readers understand without chat history</section>
+    <section name="Analysis">Step-by-step reasoning with evidence; include file:line references</section>
+    <section name="Recommendations">Actionable next steps ordered by priority</section>
+  </structure>
+  <note>Write with enough detail to be useful standalone, but avoid unnecessary filler.</note>
+</mcp-injection>
 ```
 
 ### `context_paths`
 
-When `context_paths` is provided, reference paths are appended:
+When `context_paths` is provided, reference paths are injected:
 
-```
+```xml
 <your prompt>
 
----
-Reference Paths:
-- /src/api/handlers.py
-- /config/settings.json
+<mcp-injection type="reference-paths">
+  <description>
+    These paths are provided as reference for project structure.
+    You may use them to understand naming conventions and file organization.
+  </description>
+  <paths>
+    <path>/src/api/handlers.py</path>
+    <path>/config/settings.json</path>
+  </paths>
+</mcp-injection>
 ```
+
+## Stateless Design
+
+**Important**: Each tool call is stateless - the agent has NO memory of previous calls.
+
+- **New conversation** (no `continuation_id`): Include ALL relevant context in your prompt - background, specifics, constraints, and prior findings.
+- **Continuing conversation** (with `continuation_id`): The agent retains context from that session, so you can be brief.
+
+If your request references prior context (e.g., "fix that bug", "continue the work"), you must either:
+1. Provide `continuation_id` from a previous response, OR
+2. Expand the reference into concrete details
 
 ## File Output Options
 
