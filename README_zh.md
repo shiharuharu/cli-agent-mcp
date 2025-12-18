@@ -59,13 +59,14 @@ pip install -e .
 |------|------|------|--------|------|
 | `prompt` | string | ✓ | - | 任务指令 |
 | `workspace` | string | ✓ | - | 项目目录的绝对路径 |
+| `continuation_id` | string | | `""` | 传入上次响应中的 ID 以继续对话 |
 | `permission` | string | | `read-only` | 权限级别：`read-only`、`workspace-write`、`unlimited` |
 | `model` | string | | `""` | 模型覆盖（仅在明确请求时指定） |
 | `save_file` | string | | `""` | 将代理输出保存到文件路径 |
 | `save_file_with_prompt` | boolean | | `false` | 在保存的文件中包含分析提示 |
 | `full_output` | boolean | | `false` | 返回包含推理过程的详细输出 |
+| `context_paths` | array | | `[]` | 提供上下文的参考文件/目录路径 |
 | `image` | array | | `[]` | 用于视觉上下文的图片文件绝对路径 |
-| `session_id` | string | | `""` | 恢复之前对话的会话 ID |
 | `task_note` | string | | `""` | GUI 显示标签 |
 | `debug` | boolean | | (全局) | 覆盖此次调用的调试设置 |
 
@@ -79,12 +80,13 @@ pip install -e .
 |------|------|------|--------|------|
 | `prompt` | string | ✓ | - | 任务指令 |
 | `workspace` | string | ✓ | - | 项目目录的绝对路径 |
+| `continuation_id` | string | | `""` | 传入上次响应中的 ID 以继续对话 |
 | `permission` | string | | `read-only` | 权限级别：`read-only`、`workspace-write`、`unlimited` |
 | `model` | string | | `""` | 模型覆盖 |
 | `save_file` | string | | `""` | 将代理输出保存到文件路径 |
 | `save_file_with_prompt` | boolean | | `false` | 在保存的文件中包含分析提示 |
 | `full_output` | boolean | | `false` | 返回包含推理过程的详细输出 |
-| `session_id` | string | | `""` | 恢复之前对话的会话 ID |
+| `context_paths` | array | | `[]` | 提供上下文的参考文件/目录路径 |
 | `task_note` | string | | `""` | GUI 显示标签 |
 | `debug` | boolean | | (全局) | 覆盖此次调用的调试设置 |
 
@@ -98,15 +100,16 @@ pip install -e .
 |------|------|------|--------|------|
 | `prompt` | string | ✓ | - | 任务指令 |
 | `workspace` | string | ✓ | - | 项目目录的绝对路径 |
+| `continuation_id` | string | | `""` | 传入上次响应中的 ID 以继续对话 |
 | `permission` | string | | `read-only` | 权限级别：`read-only`、`workspace-write`、`unlimited` |
 | `model` | string | | `""` | 模型覆盖（`sonnet`、`opus` 或完整模型名） |
 | `save_file` | string | | `""` | 将代理输出保存到文件路径 |
 | `save_file_with_prompt` | boolean | | `false` | 在保存的文件中包含分析提示 |
 | `full_output` | boolean | | `false` | 返回包含推理过程的详细输出 |
+| `context_paths` | array | | `[]` | 提供上下文的参考文件/目录路径 |
 | `system_prompt` | string | | `""` | 完全替换默认系统提示 |
 | `append_system_prompt` | string | | `""` | 追加到默认提示的额外指令 |
 | `agent` | string | | `""` | 指定代理名称（覆盖默认代理设置） |
-| `session_id` | string | | `""` | 恢复之前对话的会话 ID |
 | `task_note` | string | | `""` | GUI 显示标签 |
 | `debug` | boolean | | (全局) | 覆盖此次调用的调试设置 |
 
@@ -120,16 +123,46 @@ pip install -e .
 |------|------|------|--------|------|
 | `prompt` | string | ✓ | - | 任务指令 |
 | `workspace` | string | ✓ | - | 项目目录的绝对路径 |
+| `continuation_id` | string | | `""` | 传入上次响应中的 ID 以继续对话 |
 | `permission` | string | | `read-only` | 权限级别：`read-only`、`workspace-write`、`unlimited` |
 | `model` | string | | `""` | 模型覆盖（格式：`provider/model`） |
 | `save_file` | string | | `""` | 将代理输出保存到文件路径 |
 | `save_file_with_prompt` | boolean | | `false` | 在保存的文件中包含分析提示 |
 | `full_output` | boolean | | `false` | 返回包含推理过程的详细输出 |
+| `context_paths` | array | | `[]` | 提供上下文的参考文件/目录路径 |
 | `file` | array | | `[]` | 要附加的文件绝对路径 |
 | `agent` | string | | `build` | 代理类型：`build`、`plan` 等 |
-| `session_id` | string | | `""` | 恢复之前对话的会话 ID |
 | `task_note` | string | | `""` | GUI 显示标签 |
 | `debug` | boolean | | (全局) | 覆盖此次调用的调试设置 |
+
+## 提示词注入
+
+部分参数会自动向提示词注入额外内容：
+
+### `save_file_with_prompt`
+
+当同时设置 `save_file` 和 `save_file_with_prompt` 时，会追加说明：
+
+```
+<你的提示词>
+
+---
+Note: Your response will be automatically saved to an external file.
+Please verbalize your analysis process and insights in detail as you work...
+```
+
+### `context_paths`
+
+当提供 `context_paths` 时，会追加参考路径：
+
+```
+<你的提示词>
+
+---
+Reference Paths:
+- /src/api/handlers.py
+- /config/settings.json
+```
 
 ## 权限级别
 

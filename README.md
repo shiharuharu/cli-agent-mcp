@@ -59,13 +59,14 @@ Invoke OpenAI Codex CLI agent for deep code analysis and critical review.
 |-----------|------|----------|---------|-------------|
 | `prompt` | string | ✓ | - | Task instruction for the agent |
 | `workspace` | string | ✓ | - | Absolute path to the project directory |
+| `continuation_id` | string | | `""` | Pass from previous response to continue conversation |
 | `permission` | string | | `read-only` | Permission level: `read-only`, `workspace-write`, `unlimited` |
 | `model` | string | | `""` | Model override (only specify if explicitly requested) |
 | `save_file` | string | | `""` | Save agent output to file path |
 | `save_file_with_prompt` | boolean | | `false` | Include analysis prompt in saved file |
 | `full_output` | boolean | | `false` | Return detailed output including reasoning |
+| `context_paths` | array | | `[]` | Reference file/directory paths to provide context |
 | `image` | array | | `[]` | Absolute paths to image files for visual context |
-| `session_id` | string | | `""` | Session ID to resume previous conversation |
 | `task_note` | string | | `""` | Display label for GUI |
 | `debug` | boolean | | (global) | Override debug setting for this call |
 
@@ -79,12 +80,13 @@ Invoke Google Gemini CLI agent for UI design and comprehensive analysis.
 |-----------|------|----------|---------|-------------|
 | `prompt` | string | ✓ | - | Task instruction for the agent |
 | `workspace` | string | ✓ | - | Absolute path to the project directory |
+| `continuation_id` | string | | `""` | Pass from previous response to continue conversation |
 | `permission` | string | | `read-only` | Permission level: `read-only`, `workspace-write`, `unlimited` |
 | `model` | string | | `""` | Model override |
 | `save_file` | string | | `""` | Save agent output to file path |
 | `save_file_with_prompt` | boolean | | `false` | Include analysis prompt in saved file |
 | `full_output` | boolean | | `false` | Return detailed output including reasoning |
-| `session_id` | string | | `""` | Session ID to resume previous conversation |
+| `context_paths` | array | | `[]` | Reference file/directory paths to provide context |
 | `task_note` | string | | `""` | Display label for GUI |
 | `debug` | boolean | | (global) | Override debug setting for this call |
 
@@ -98,15 +100,16 @@ Invoke Anthropic Claude CLI agent for code implementation.
 |-----------|------|----------|---------|-------------|
 | `prompt` | string | ✓ | - | Task instruction for the agent |
 | `workspace` | string | ✓ | - | Absolute path to the project directory |
+| `continuation_id` | string | | `""` | Pass from previous response to continue conversation |
 | `permission` | string | | `read-only` | Permission level: `read-only`, `workspace-write`, `unlimited` |
 | `model` | string | | `""` | Model override (`sonnet`, `opus`, or full model name) |
 | `save_file` | string | | `""` | Save agent output to file path |
 | `save_file_with_prompt` | boolean | | `false` | Include analysis prompt in saved file |
 | `full_output` | boolean | | `false` | Return detailed output including reasoning |
+| `context_paths` | array | | `[]` | Reference file/directory paths to provide context |
 | `system_prompt` | string | | `""` | Complete replacement for the default system prompt |
 | `append_system_prompt` | string | | `""` | Additional instructions appended to default prompt |
 | `agent` | string | | `""` | Specify agent name (overrides default agent setting) |
-| `session_id` | string | | `""` | Session ID to resume previous conversation |
 | `task_note` | string | | `""` | Display label for GUI |
 | `debug` | boolean | | (global) | Override debug setting for this call |
 
@@ -120,16 +123,46 @@ Invoke OpenCode CLI agent for full-stack development.
 |-----------|------|----------|---------|-------------|
 | `prompt` | string | ✓ | - | Task instruction for the agent |
 | `workspace` | string | ✓ | - | Absolute path to the project directory |
+| `continuation_id` | string | | `""` | Pass from previous response to continue conversation |
 | `permission` | string | | `read-only` | Permission level: `read-only`, `workspace-write`, `unlimited` |
 | `model` | string | | `""` | Model override (format: `provider/model`) |
 | `save_file` | string | | `""` | Save agent output to file path |
 | `save_file_with_prompt` | boolean | | `false` | Include analysis prompt in saved file |
 | `full_output` | boolean | | `false` | Return detailed output including reasoning |
+| `context_paths` | array | | `[]` | Reference file/directory paths to provide context |
 | `file` | array | | `[]` | Absolute paths to files to attach |
 | `agent` | string | | `build` | Agent type: `build`, `plan`, etc. |
-| `session_id` | string | | `""` | Session ID to resume previous conversation |
 | `task_note` | string | | `""` | Display label for GUI |
 | `debug` | boolean | | (global) | Override debug setting for this call |
+
+## Prompt Injection
+
+Some parameters automatically inject additional content into the prompt:
+
+### `save_file_with_prompt`
+
+When `save_file` and `save_file_with_prompt` are both set, a note is appended:
+
+```
+<your prompt>
+
+---
+Note: Your response will be automatically saved to an external file.
+Please verbalize your analysis process and insights in detail as you work...
+```
+
+### `context_paths`
+
+When `context_paths` is provided, reference paths are appended:
+
+```
+<your prompt>
+
+---
+Reference Paths:
+- /src/api/handlers.py
+- /config/settings.json
+```
 
 ## Permission Levels
 
