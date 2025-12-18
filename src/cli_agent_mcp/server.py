@@ -138,20 +138,17 @@ COMMON_PROPERTIES = {
     "prompt": {
         "type": "string",
         "description": (
-            "Task instruction for the agent. For NEW conversations (no continuation_id), "
-            "make this prompt self-contained: include brief background, relevant files/"
-            "functions/errors, constraints, and key findings. References like 'fix that bug' "
-            "are only valid if you also pass continuation_id or restate the details. "
-            "Supports multi-line text and markdown."
+            "Detailed instructions for the agent. "
+            "IMPORTANT: If 'continuation_id' is NOT set, you MUST include ALL context "
+            "(background, file contents, errors, constraints), as the agent has no memory. "
+            "If 'continuation_id' IS set, you may be brief and reference previous context."
         ),
     },
     "workspace": {
         "type": "string",
         "description": (
-            "Project root directory for the agent. Used as the working directory and "
-            "boundary for 'workspace-write' permissions. Accepts absolute or relative "
-            "paths (relative to the MCP server CWD). Example: '/Users/dev/my-project' "
-            "or './src'."
+            "Project root directory. Boundary for 'workspace-write'. "
+            "Defaults to server CWD. Use absolute paths or relative paths."
         ),
     },
     # === 常用参数 ===
@@ -159,10 +156,9 @@ COMMON_PROPERTIES = {
         "type": "string",
         "default": "",
         "description": (
-            "Opaque ID for multi-turn conversations. When set, the agent restores "
-            "context from that session so prompts can be brief (e.g., 'now fix the "
-            "second issue'). When empty, this starts a NEW conversation and previous "
-            "calls are ignored. Use the <continuation_id> value from earlier responses."
+            "Session ID for multi-turn conversations. "
+            "Provide existing ID to restore memory. "
+            "Leave EMPTY to start a FRESH session (ignoring history)."
         ),
     },
     "permission": {
@@ -170,73 +166,57 @@ COMMON_PROPERTIES = {
         "enum": ["read-only", "workspace-write", "unlimited"],
         "default": "read-only",
         "description": (
-            "File system permission level for this call:\n"
-            "- 'read-only': read files only\n"
-            "- 'workspace-write': read/write within workspace (recommended)\n"
-            "- 'unlimited': (DANGER) full access, use only when explicitly needed"
+            "Security level: "
+            "'read-only' (analyze files), "
+            "'workspace-write' (modify inside workspace), "
+            "'unlimited' (full system access). "
+            "Default: 'read-only'."
         ),
     },
     "model": {
         "type": "string",
         "default": "",
-        "description": (
-            "Optional model override. When empty, uses the server's default model. "
-            "Example: 'gpt-4.1'."
-        ),
+        "description": "Optional model override (e.g., 'gemini-2.5-pro'). Use only if specifically requested.",
     },
     "save_file": {
         "type": "string",
         "description": (
-            "Save the agent's final output (without debug info) to the given file path. "
-            "Example: '/path/to/output.md'. This write is exempt from 'permission' "
-            "restrictions and exists only to persist the response text; the agent's own "
-            "file/tool operations are still governed by 'permission'."
+            "File path to save the FINAL textual answer (no debug info). "
+            "NOTE: This write IS PERMITTED even in 'read-only' mode (handled by server). "
+            "Use to persist reports/documentation."
         ),
     },
     "save_file_with_wrapper": {
         "type": "boolean",
         "default": False,
         "description": (
-            "When true AND save_file is set, wrap the saved output in <agent-output> "
-            "XML tags containing metadata (agent name, continuation_id). Useful for "
-            "later parsing or multi-agent document assembly."
+            "When true AND save_file is set, wrap output in <agent-output> XML tags "
+            "with metadata (agent name, continuation_id). For multi-agent assembly."
         ),
     },
     "save_file_with_append_mode": {
         "type": "boolean",
         "default": False,
         "description": (
-            "When true AND save_file is set, append to the file instead of overwriting. "
-            "Useful when multiple calls or agents add to the same document."
+            "When true AND save_file is set, append instead of overwrite. "
+            "For multi-agent collaboration on same document."
         ),
     },
     "verbose_output": {
         "type": "boolean",
         "default": False,
-        "description": (
-            "Return detailed output including internal reasoning and tool call traces, "
-            "instead of only the final answer text. Useful for research/analysis "
-            "or debugging. Default: false."
-        ),
+        "description": "Include internal reasoning/tool traces in response. Useful for debugging.",
     },
     "report_mode": {
         "type": "boolean",
         "default": False,
-        "description": (
-            "Ask the model to produce a comprehensive, standalone report-style answer "
-            "that can be read without chat context. Useful for analysis reports, "
-            "documentation, or shareable summaries."
-        ),
+        "description": "Generate a standalone, document-style report (no chat filler) suitable for sharing.",
     },
     "context_paths": {
         "type": "array",
         "items": {"type": "string"},
         "default": [],
-        "description": (
-            "List of file or directory paths to highlight as relevant context. The agent "
-            "uses these as hints on where to focus when reading code. Paths are injected "
-            "into the prompt as references. Example: ['/src/api/handlers.py', '/config/']."
-        ),
+        "description": "List of relevant files/dirs to preload as context hints.",
     },
 }
 
@@ -310,15 +290,15 @@ TAIL_PROPERTIES = {
     "task_note": {
         "type": "string",
         "default": "",
-        "description": "Display label for GUI, e.g., '[Review] PR #123'",
+        "description": (
+            "REQUIRED user-facing label. "
+            "Summarize action in < 60 chars (e.g., '[Fix] Auth logic' or '[Read] config.py'). "
+            "Shown in GUI progress bar to inform user."
+        ),
     },
     "debug": {
         "type": "boolean",
-        "description": (
-            "Override global debug setting for this call. "
-            "When true, response includes execution stats (model, duration, tokens). "
-            "When omitted, uses global CAM_DEBUG setting."
-        ),
+        "description": "Enable execution stats (tokens, duration) for this call.",
     },
 }
 
