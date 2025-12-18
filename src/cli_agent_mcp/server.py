@@ -213,6 +213,24 @@ COMMON_PROPERTIES = {
             "Useful for generating comprehensive analysis reports."
         ),
     },
+    "save_file_with_wrapper": {
+        "type": "boolean",
+        "default": False,
+        "description": (
+            "When true AND save_file is set, wrap output with <agent-output> XML tags "
+            "containing metadata (agent name, continuation_id). "
+            "Useful for later parsing or multi-agent document assembly."
+        ),
+    },
+    "save_file_with_append_mode": {
+        "type": "boolean",
+        "default": False,
+        "description": (
+            "When true AND save_file is set, append to the file instead of overwriting. "
+            "Useful for multi-agent collaboration where each agent adds to the same document. "
+            "Example workflow: Codex analyzes → Gemini adds ideas → Claude summarizes, all to one file."
+        ),
+    },
     "full_output": {
         "type": "boolean",
         "default": False,
@@ -570,8 +588,25 @@ def create_server(
                         response_data,
                         full_output=full_output,
                     )
-                    Path(save_file_path).write_text(file_content, encoding="utf-8")
-                    logger.info(f"Saved output to: {save_file_path}")
+
+                    # 添加 XML wrapper（如果启用）
+                    if args.get("save_file_with_wrapper", False):
+                        continuation_id = result.session_id or ""
+                        file_content = (
+                            f'<agent-output agent="{name}" continuation_id="{continuation_id}">\n'
+                            f'{file_content}\n'
+                            f'</agent-output>\n'
+                        )
+
+                    # 追加或覆盖
+                    file_path = Path(save_file_path)
+                    if args.get("save_file_with_append_mode", False) and file_path.exists():
+                        with file_path.open("a", encoding="utf-8") as f:
+                            f.write("\n" + file_content)
+                        logger.info(f"Appended output to: {save_file_path}")
+                    else:
+                        file_path.write_text(file_content, encoding="utf-8")
+                        logger.info(f"Saved output to: {save_file_path}")
                 except Exception as e:
                     logger.warning(f"Failed to save output to {save_file_path}: {e}")
 
