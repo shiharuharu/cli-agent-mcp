@@ -213,6 +213,17 @@ COMMON_PROPERTIES = {
             "Default: false (concise output)"
         ),
     },
+    "context_paths": {
+        "type": "array",
+        "items": {"type": "string"},
+        "default": [],
+        "description": (
+            "List of relevant file or directory paths to provide context. "
+            "Use when you want to hint which files the agent should focus on. "
+            "Paths are injected into the prompt as reference information. "
+            "Example: ['/src/api/handlers.py', '/config/']"
+        ),
+    },
 }
 
 # 特有参数（插入到公共参数之后）
@@ -476,6 +487,17 @@ def create_server(
                     "This detailed commentary will be preserved in the saved output."
                 )
                 arguments = {**arguments, "prompt": arguments["prompt"] + injection_note}
+
+            # 处理 context_paths：在 prompt 末尾注入参考路径
+            context_paths = arguments.get("context_paths", [])
+            if context_paths:
+                paths_list = "\n".join(f"- {p}" for p in context_paths)
+                context_note = (
+                    "\n\n---\n"
+                    "Reference Paths:\n"
+                    f"{paths_list}"
+                )
+                arguments = {**arguments, "prompt": arguments["prompt"] + context_note}
 
             # 构建参数
             params = _build_params(name, arguments)
