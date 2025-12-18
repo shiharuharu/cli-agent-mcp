@@ -427,7 +427,7 @@ class TestCollectedResult:
             task_note="Test task",
             start_time=100.0,
             end_time=110.0,
-            full_output=True,
+            verbose_output=True,
         )
 
         assert exec_result.success is True

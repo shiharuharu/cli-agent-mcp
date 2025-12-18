@@ -88,11 +88,11 @@ CAPABILITIES:
 
 LIMITATIONS:
 - Not good at summarization (outputs can be verbose)
-- May need full_output=true for research tasks
+- May need verbose_output=true for research tasks
 
 BEST PRACTICES:
 - Use for: UI mockups, image analysis, requirement discovery
-- Enable full_output when doing research or analysis
+- Enable verbose_output when doing research or analysis
 - Good first choice for "understand this codebase" tasks""",
 
     "claude": """Invoke Anthropic Claude CLI agent for code implementation.
@@ -138,27 +138,20 @@ COMMON_PROPERTIES = {
     "prompt": {
         "type": "string",
         "description": (
-            "Task instruction for the agent. "
-            "IMPORTANT: This agent has NO memory of previous calls - each call starts fresh. "
-            "When starting a NEW conversation (no continuation_id), include ALL relevant context:\n"
-            "- Background: What problem are you solving? What's the goal?\n"
-            "- Specifics: File paths, function names, error messages, code snippets\n"
-            "- Constraints: What to avoid, scope limits, patterns to follow\n"
-            "- Prior findings: Relevant discoveries from your own analysis\n"
-            "If the user's request references prior context (e.g., 'fix that bug', 'continue the work'), "
-            "you must either provide continuation_id OR expand the reference into concrete details. "
-            "Never pass vague references without context - the agent cannot resolve them.\n"
-            "When CONTINUING a conversation (with continuation_id), you can be brief - "
-            "the agent retains context from that session."
+            "Task instruction for the agent. For NEW conversations (no continuation_id), "
+            "make this prompt self-contained: include brief background, relevant files/"
+            "functions/errors, constraints, and key findings. References like 'fix that bug' "
+            "are only valid if you also pass continuation_id or restate the details. "
+            "Supports multi-line text and markdown."
         ),
     },
     "workspace": {
         "type": "string",
         "description": (
-            "Absolute path to the project directory. "
-            "Use the path mentioned in conversation, or the current project root. "
-            "Supports relative paths (resolved against server CWD). "
-            "Example: '/Users/dev/my-project' or './src'"
+            "Project root directory for the agent. Used as the working directory and "
+            "boundary for 'workspace-write' permissions. Accepts absolute or relative "
+            "paths (relative to the MCP server CWD). Example: '/Users/dev/my-project' "
+            "or './src'."
         ),
     },
     # === 常用参数 ===
@@ -166,12 +159,10 @@ COMMON_PROPERTIES = {
         "type": "string",
         "default": "",
         "description": (
-            "Unique conversation ID for multi-turn conversations. "
-            "When provided, the agent retains full context from that session, "
-            "so your prompt can be brief (e.g., 'now fix the second issue'). "
-            "When empty, this is a NEW conversation - make your prompt self-contained "
-            "with all necessary context since the agent has no memory of prior calls. "
-            "Get this ID from the <continuation_id> field in previous responses."
+            "Opaque ID for multi-turn conversations. When set, the agent restores "
+            "context from that session so prompts can be brief (e.g., 'now fix the "
+            "second issue'). When empty, this starts a NEW conversation and previous "
+            "calls are ignored. Use the <continuation_id> value from earlier responses."
         ),
     },
     "permission": {
@@ -179,37 +170,36 @@ COMMON_PROPERTIES = {
         "enum": ["read-only", "workspace-write", "unlimited"],
         "default": "read-only",
         "description": (
-            "File system permission level:\n"
-            "- 'read-only': Can only read files, safe for analysis tasks\n"
-            "- 'workspace-write': Can modify files within workspace only (recommended for most tasks)\n"
-            "- 'unlimited': (DANGER) Full system access, use only when explicitly needed"
+            "File system permission level for this call:\n"
+            "- 'read-only': read files only\n"
+            "- 'workspace-write': read/write within workspace (recommended)\n"
+            "- 'unlimited': (DANGER) full access, use only when explicitly needed"
         ),
     },
     "model": {
         "type": "string",
         "default": "",
-        "description": "Model override. Only specify if user explicitly requests a specific model.",
+        "description": (
+            "Optional model override. When empty, uses the server's default model. "
+            "Example: 'gpt-4.1'."
+        ),
     },
     "save_file": {
         "type": "string",
         "description": (
-            "Save agent output to a file at the specified path. "
-            "The file will contain the agent's response without debug info. "
-            "This saves the orchestrator from having to write files separately. "
-            "Example: '/path/to/output.md'\n\n"
-            "NOTE: This is intentionally exempt from permission restrictions. "
-            "It serves as a convenience for persisting analysis results, "
-            "not as a general file-write capability. The CLI agent's actual "
-            "file operations are still governed by the 'permission' parameter."
+            "Save the agent's final output (without debug info) to the given file path. "
+            "Example: '/path/to/output.md'. This write is exempt from 'permission' "
+            "restrictions and exists only to persist the response text; the agent's own "
+            "file/tool operations are still governed by 'permission'."
         ),
     },
     "save_file_with_wrapper": {
         "type": "boolean",
         "default": False,
         "description": (
-            "When true AND save_file is set, wrap output with <agent-output> XML tags "
-            "containing metadata (agent name, continuation_id). "
-            "Useful for later parsing or multi-agent document assembly."
+            "When true AND save_file is set, wrap the saved output in <agent-output> "
+            "XML tags containing metadata (agent name, continuation_id). Useful for "
+            "later parsing or multi-agent document assembly."
         ),
     },
     "save_file_with_append_mode": {
@@ -217,27 +207,25 @@ COMMON_PROPERTIES = {
         "default": False,
         "description": (
             "When true AND save_file is set, append to the file instead of overwriting. "
-            "Useful for multi-agent collaboration where each agent adds to the same document. "
-            "Example workflow: Codex analyzes → Gemini adds ideas → Claude summarizes, all to one file."
+            "Useful when multiple calls or agents add to the same document."
         ),
     },
-    "full_output": {
+    "verbose_output": {
         "type": "boolean",
         "default": False,
         "description": (
-            "Return detailed output including reasoning and tool calls. "
-            "Recommended for Gemini research/analysis tasks. "
-            "Default: false (concise output)"
+            "Return detailed output including internal reasoning and tool call traces, "
+            "instead of only the final answer text. Useful for research/analysis "
+            "or debugging. Default: false."
         ),
     },
     "report_mode": {
         "type": "boolean",
         "default": False,
         "description": (
-            "Enable report mode for comprehensive, standalone output. "
-            "Injects formatting guidance asking the model to produce detailed, "
-            "self-contained analysis that can be understood without conversation context. "
-            "Useful for generating analysis reports, documentation, or shareable summaries."
+            "Ask the model to produce a comprehensive, standalone report-style answer "
+            "that can be read without chat context. Useful for analysis reports, "
+            "documentation, or shareable summaries."
         ),
     },
     "context_paths": {
@@ -245,10 +233,9 @@ COMMON_PROPERTIES = {
         "items": {"type": "string"},
         "default": [],
         "description": (
-            "List of relevant file or directory paths to provide context. "
-            "Use when you want to hint which files the agent should focus on. "
-            "Paths are injected into the prompt as reference information. "
-            "Example: ['/src/api/handlers.py', '/config/']"
+            "List of file or directory paths to highlight as relevant context. The agent "
+            "uses these as hints on where to focus when reading code. Paths are injected "
+            "into the prompt as references. Example: ['/src/api/handlers.py', '/config/']."
         ),
     },
 }
@@ -341,7 +328,7 @@ def create_tool_schema(cli_type: str) -> dict[str, Any]:
 
     参数顺序：
     1. prompt, workspace (必填)
-    2. continuation_id, permission, model, save_file, full_output (常用)
+    2. continuation_id, permission, model, save_file, verbose_output (常用)
     3. 特有参数 (image / system_prompt / append_system_prompt / file / agent)
     4. task_note, debug (末尾)
     """
@@ -576,7 +563,7 @@ def create_server(
             result = await invoker.execute(params)
 
             # 获取参数
-            full_output = arguments.get("full_output", False)
+            verbose_output = arguments.get("verbose_output", False)
             debug_enabled = arguments.get("debug") if "debug" in arguments else config.debug
             save_file_path = arguments.get("save_file", "")
 
@@ -598,7 +585,7 @@ def create_server(
             response_data = ResponseData(
                 answer=result.agent_messages if result.success else "",
                 session_id=result.session_id or "",
-                thought_steps=result.thought_steps if full_output else [],
+                thought_steps=result.thought_steps if verbose_output else [],
                 debug_info=debug_info,
                 success=result.success,
                 error=result.error,
@@ -608,7 +595,7 @@ def create_server(
             formatter = get_formatter()
             response = formatter.format(
                 response_data,
-                full_output=full_output,
+                verbose_output=verbose_output,
                 debug=debug_enabled,
             )
 
@@ -629,7 +616,7 @@ def create_server(
                 try:
                     file_content = formatter.format_for_file(
                         response_data,
-                        full_output=full_output,
+                        verbose_output=verbose_output,
                     )
 
                     # 添加 XML wrapper（如果启用）
@@ -695,7 +682,7 @@ def _build_params(cli_type: str, args: dict[str, Any]):
         "permission": Permission(args.get("permission", "read-only")),
         "session_id": args.get("continuation_id", ""),  # 外部 continuation_id → 内部 session_id
         "model": args.get("model", ""),
-        "full_output": args.get("full_output", False),
+        "verbose_output": args.get("verbose_output", False),
         "task_note": args.get("task_note", ""),
         "task_tags": args.get("task_tags", []),
     }

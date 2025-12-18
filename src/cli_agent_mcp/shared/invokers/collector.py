@@ -102,7 +102,7 @@ class CollectedResult:
         task_tags: list[str] | None = None,
         start_time: float = 0.0,
         end_time: float = 0.0,
-        full_output: bool = False,
+        verbose_output: bool = False,
     ) -> ExecutionResult:
         """转换为 ExecutionResult。
 
@@ -112,7 +112,7 @@ class CollectedResult:
             task_tags: 任务标签
             start_time: 开始时间戳
             end_time: 结束时间戳
-            full_output: 是否包含完整消息
+            verbose_output: 是否包含完整消息
 
         Returns:
             ExecutionResult 实例
@@ -127,7 +127,7 @@ class CollectedResult:
             agent_messages=self.final_answer,
             thought_steps=self.thought_steps,
             error=self.error_message,
-            all_messages=self.all_messages if full_output else None,
+            all_messages=self.all_messages if verbose_output else None,
             gui_metadata=GUIMetadata(
                 task_note=task_note,
                 task_tags=task_tags or [],
