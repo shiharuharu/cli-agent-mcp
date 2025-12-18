@@ -145,6 +145,9 @@ COMMON_PROPERTIES = {
             "- Specifics: File paths, function names, error messages, code snippets\n"
             "- Constraints: What to avoid, scope limits, patterns to follow\n"
             "- Prior findings: Relevant discoveries from your own analysis\n"
+            "If the user's request references prior context (e.g., 'fix that bug', 'continue the work'), "
+            "you must either provide continuation_id OR expand the reference into concrete details. "
+            "Never pass vague references without context - the agent cannot resolve them.\n"
             "When CONTINUING a conversation (with continuation_id), you can be brief - "
             "the agent retains context from that session."
         ),
