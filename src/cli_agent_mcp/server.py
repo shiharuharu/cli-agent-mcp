@@ -500,33 +500,44 @@ def create_server(
             logger.debug(f"No registry available")
 
         try:
-            # 处理 save_file_with_prompt：在 prompt 末尾注入说明
+            # 处理 save_file_with_prompt：注入输出格式要求
             save_file_path = arguments.get("save_file", "")
             save_file_with_prompt = arguments.get("save_file_with_prompt", False)
             if save_file_path and save_file_with_prompt:
-                # 注入提示词，强制模型输出详细的分析报告
-                injection_note = (
-                    "\n\n---\n"
-                    "OUTPUT REQUIREMENTS: This response will be saved as a standalone document. "
-                    "Write as a comprehensive analysis report that can be understood WITHOUT any prior context. "
-                    "You MUST structure your response to include:\n"
-                    "1. **Summary**: Key findings and conclusions upfront\n"
-                    "2. **Analysis**: Detailed examination with evidence and reasoning\n"
-                    "3. **Specifics**: Code references, file paths, line numbers where relevant\n"
-                    "4. **Recommendations**: Actionable next steps if applicable\n"
-                    "Do NOT write terse responses. Explain your reasoning as you work through the analysis."
-                )
+                injection_note = """
+
+<mcp-injection type="output-format">
+  <output-requirements>
+    <rule>This response will be saved as a standalone document.</rule>
+    <rule>Write so it can be understood WITHOUT any prior conversation context.</rule>
+    <rule>Do NOT reference "above", "previous messages", or "as discussed".</rule>
+    <rule>Use the same language as the user's request.</rule>
+  </output-requirements>
+  <structure>
+    <section name="Summary">3-7 bullet points with key findings and conclusions</section>
+    <section name="Context">Restate the task/problem so readers understand without chat history</section>
+    <section name="Analysis">Step-by-step reasoning with evidence; include file:line references where relevant</section>
+    <section name="Recommendations">Actionable next steps ordered by priority</section>
+  </structure>
+  <note>Write with enough detail to be useful standalone, but avoid unnecessary filler.</note>
+</mcp-injection>"""
                 arguments = {**arguments, "prompt": arguments["prompt"] + injection_note}
 
-            # 处理 context_paths：在 prompt 末尾注入参考路径
+            # 处理 context_paths：注入参考路径
             context_paths = arguments.get("context_paths", [])
             if context_paths:
-                paths_list = "\n".join(f"- {p}" for p in context_paths)
-                context_note = (
-                    "\n\n---\n"
-                    "Reference Paths:\n"
-                    f"{paths_list}"
-                )
+                paths_xml = "\n".join(f"    <path>{p}</path>" for p in context_paths)
+                context_note = f"""
+
+<mcp-injection type="reference-paths">
+  <description>
+    These paths are provided as reference for project structure.
+    You may use them to understand naming conventions and file organization.
+  </description>
+  <paths>
+{paths_xml}
+  </paths>
+</mcp-injection>"""
                 arguments = {**arguments, "prompt": arguments["prompt"] + context_note}
 
             # 构建参数
