@@ -78,7 +78,9 @@ Invoke OpenAI Codex CLI agent for deep code analysis and critical review.
 | `permission` | string | | `read-only` | Permission level: `read-only`, `workspace-write`, `unlimited` |
 | `model` | string | | `""` | Model override (only specify if explicitly requested) |
 | `save_file` | string | | `""` | Save agent output to file path |
-| `save_file_with_prompt` | boolean | | `false` | Include analysis prompt in saved file |
+| `save_file_with_prompt` | boolean | | `false` | Inject prompt hint to encourage verbose reasoning output |
+| `save_file_with_wrapper` | boolean | | `false` | Wrap output with `<agent-output>` XML tags |
+| `save_file_with_append_mode` | boolean | | `false` | Append to file instead of overwriting |
 | `full_output` | boolean | | `false` | Return detailed output including reasoning |
 | `context_paths` | array | | `[]` | Reference file/directory paths to provide context |
 | `image` | array | | `[]` | Absolute paths to image files for visual context |
@@ -99,7 +101,9 @@ Invoke Google Gemini CLI agent for UI design and comprehensive analysis.
 | `permission` | string | | `read-only` | Permission level: `read-only`, `workspace-write`, `unlimited` |
 | `model` | string | | `""` | Model override |
 | `save_file` | string | | `""` | Save agent output to file path |
-| `save_file_with_prompt` | boolean | | `false` | Include analysis prompt in saved file |
+| `save_file_with_prompt` | boolean | | `false` | Inject prompt hint to encourage verbose reasoning output |
+| `save_file_with_wrapper` | boolean | | `false` | Wrap output with `<agent-output>` XML tags |
+| `save_file_with_append_mode` | boolean | | `false` | Append to file instead of overwriting |
 | `full_output` | boolean | | `false` | Return detailed output including reasoning |
 | `context_paths` | array | | `[]` | Reference file/directory paths to provide context |
 | `task_note` | string | | `""` | Display label for GUI |
@@ -119,7 +123,9 @@ Invoke Anthropic Claude CLI agent for code implementation.
 | `permission` | string | | `read-only` | Permission level: `read-only`, `workspace-write`, `unlimited` |
 | `model` | string | | `""` | Model override (`sonnet`, `opus`, or full model name) |
 | `save_file` | string | | `""` | Save agent output to file path |
-| `save_file_with_prompt` | boolean | | `false` | Include analysis prompt in saved file |
+| `save_file_with_prompt` | boolean | | `false` | Inject prompt hint to encourage verbose reasoning output |
+| `save_file_with_wrapper` | boolean | | `false` | Wrap output with `<agent-output>` XML tags |
+| `save_file_with_append_mode` | boolean | | `false` | Append to file instead of overwriting |
 | `full_output` | boolean | | `false` | Return detailed output including reasoning |
 | `context_paths` | array | | `[]` | Reference file/directory paths to provide context |
 | `system_prompt` | string | | `""` | Complete replacement for the default system prompt |
@@ -142,7 +148,9 @@ Invoke OpenCode CLI agent for full-stack development.
 | `permission` | string | | `read-only` | Permission level: `read-only`, `workspace-write`, `unlimited` |
 | `model` | string | | `""` | Model override (format: `provider/model`) |
 | `save_file` | string | | `""` | Save agent output to file path |
-| `save_file_with_prompt` | boolean | | `false` | Include analysis prompt in saved file |
+| `save_file_with_prompt` | boolean | | `false` | Inject prompt hint to encourage verbose reasoning output |
+| `save_file_with_wrapper` | boolean | | `false` | Wrap output with `<agent-output>` XML tags |
+| `save_file_with_append_mode` | boolean | | `false` | Append to file instead of overwriting |
 | `full_output` | boolean | | `false` | Return detailed output including reasoning |
 | `context_paths` | array | | `[]` | Reference file/directory paths to provide context |
 | `file` | array | | `[]` | Absolute paths to files to attach |
@@ -177,6 +185,36 @@ When `context_paths` is provided, reference paths are appended:
 Reference Paths:
 - /src/api/handlers.py
 - /config/settings.json
+```
+
+## File Output Options
+
+### `save_file_with_wrapper`
+
+When enabled, output is wrapped with XML tags containing metadata:
+
+```
+<agent-output agent="gemini" continuation_id="abc123">
+... agent response ...
+</agent-output>
+```
+
+### `save_file_with_append_mode`
+
+When enabled, new output is appended to existing file instead of overwriting. Combined with `save_file_with_wrapper`, enables multi-agent collaboration:
+
+```
+<agent-output agent="codex" continuation_id="...">
+Critical analysis of the codebase...
+</agent-output>
+
+<agent-output agent="gemini" continuation_id="...">
+Creative suggestions for improvement...
+</agent-output>
+
+<agent-output agent="claude" continuation_id="...">
+Implementation summary...
+</agent-output>
 ```
 
 ## Permission Levels

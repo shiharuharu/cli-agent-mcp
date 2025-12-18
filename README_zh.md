@@ -78,7 +78,9 @@ pip install -e .
 | `permission` | string | | `read-only` | 权限级别：`read-only`、`workspace-write`、`unlimited` |
 | `model` | string | | `""` | 模型覆盖（仅在明确请求时指定） |
 | `save_file` | string | | `""` | 将代理输出保存到文件路径 |
-| `save_file_with_prompt` | boolean | | `false` | 在保存的文件中包含分析提示 |
+| `save_file_with_prompt` | boolean | | `false` | 注入提示词引导模型输出详细思维过程 |
+| `save_file_with_wrapper` | boolean | | `false` | 用 `<agent-output>` XML 标签包裹输出 |
+| `save_file_with_append_mode` | boolean | | `false` | 追加到文件而非覆盖 |
 | `full_output` | boolean | | `false` | 返回包含推理过程的详细输出 |
 | `context_paths` | array | | `[]` | 提供上下文的参考文件/目录路径 |
 | `image` | array | | `[]` | 用于视觉上下文的图片文件绝对路径 |
@@ -99,7 +101,9 @@ pip install -e .
 | `permission` | string | | `read-only` | 权限级别：`read-only`、`workspace-write`、`unlimited` |
 | `model` | string | | `""` | 模型覆盖 |
 | `save_file` | string | | `""` | 将代理输出保存到文件路径 |
-| `save_file_with_prompt` | boolean | | `false` | 在保存的文件中包含分析提示 |
+| `save_file_with_prompt` | boolean | | `false` | 注入提示词引导模型输出详细思维过程 |
+| `save_file_with_wrapper` | boolean | | `false` | 用 `<agent-output>` XML 标签包裹输出 |
+| `save_file_with_append_mode` | boolean | | `false` | 追加到文件而非覆盖 |
 | `full_output` | boolean | | `false` | 返回包含推理过程的详细输出 |
 | `context_paths` | array | | `[]` | 提供上下文的参考文件/目录路径 |
 | `task_note` | string | | `""` | GUI 显示标签 |
@@ -119,7 +123,9 @@ pip install -e .
 | `permission` | string | | `read-only` | 权限级别：`read-only`、`workspace-write`、`unlimited` |
 | `model` | string | | `""` | 模型覆盖（`sonnet`、`opus` 或完整模型名） |
 | `save_file` | string | | `""` | 将代理输出保存到文件路径 |
-| `save_file_with_prompt` | boolean | | `false` | 在保存的文件中包含分析提示 |
+| `save_file_with_prompt` | boolean | | `false` | 注入提示词引导模型输出详细思维过程 |
+| `save_file_with_wrapper` | boolean | | `false` | 用 `<agent-output>` XML 标签包裹输出 |
+| `save_file_with_append_mode` | boolean | | `false` | 追加到文件而非覆盖 |
 | `full_output` | boolean | | `false` | 返回包含推理过程的详细输出 |
 | `context_paths` | array | | `[]` | 提供上下文的参考文件/目录路径 |
 | `system_prompt` | string | | `""` | 完全替换默认系统提示 |
@@ -142,7 +148,9 @@ pip install -e .
 | `permission` | string | | `read-only` | 权限级别：`read-only`、`workspace-write`、`unlimited` |
 | `model` | string | | `""` | 模型覆盖（格式：`provider/model`） |
 | `save_file` | string | | `""` | 将代理输出保存到文件路径 |
-| `save_file_with_prompt` | boolean | | `false` | 在保存的文件中包含分析提示 |
+| `save_file_with_prompt` | boolean | | `false` | 注入提示词引导模型输出详细思维过程 |
+| `save_file_with_wrapper` | boolean | | `false` | 用 `<agent-output>` XML 标签包裹输出 |
+| `save_file_with_append_mode` | boolean | | `false` | 追加到文件而非覆盖 |
 | `full_output` | boolean | | `false` | 返回包含推理过程的详细输出 |
 | `context_paths` | array | | `[]` | 提供上下文的参考文件/目录路径 |
 | `file` | array | | `[]` | 要附加的文件绝对路径 |
@@ -177,6 +185,36 @@ Please verbalize your analysis process and insights in detail as you work...
 Reference Paths:
 - /src/api/handlers.py
 - /config/settings.json
+```
+
+## 文件输出选项
+
+### `save_file_with_wrapper`
+
+启用时，输出会被 XML 标签包裹，包含元数据：
+
+```
+<agent-output agent="gemini" continuation_id="abc123">
+... agent 响应 ...
+</agent-output>
+```
+
+### `save_file_with_append_mode`
+
+启用时，新输出追加到现有文件而非覆盖。配合 `save_file_with_wrapper` 使用，可实现多 agent 协作：
+
+```
+<agent-output agent="codex" continuation_id="...">
+代码库的批判性分析...
+</agent-output>
+
+<agent-output agent="gemini" continuation_id="...">
+改进的创意建议...
+</agent-output>
+
+<agent-output agent="claude" continuation_id="...">
+实现总结...
+</agent-output>
 ```
 
 ## 权限级别
