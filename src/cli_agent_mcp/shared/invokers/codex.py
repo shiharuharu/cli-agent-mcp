@@ -56,6 +56,11 @@ class CodexInvoker(CLIInvoker):
         "Long conversations and multiple compactions",
     ]
 
+    # Codex 特有：可忽略的错误消息（不触发致命错误）
+    _IGNORABLE_ERRORS = [
+        "Reconnecting",  # 网络重连消息
+    ]
+
     def __init__(
         self,
         codex_path: str = "codex",
@@ -140,6 +145,16 @@ class CodexInvoker(CLIInvoker):
                 thread_id = raw.get("thread_id", "")
                 if thread_id:
                     self._session_id = thread_id
+
+    def _is_ignorable_error(self, error_msg: str) -> bool:
+        """检查错误消息是否可忽略。
+
+        Codex 的重连消息等不应触发致命错误。
+        """
+        for pattern in self._IGNORABLE_ERRORS:
+            if pattern in error_msg:
+                return True
+        return False
 
     def _check_execution_errors(self, stderr_content: str = "") -> None:
         """检查 Codex 执行错误，处理可忽略的警告。

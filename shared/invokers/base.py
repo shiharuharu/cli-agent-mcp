@@ -714,14 +714,19 @@ class CLIInvoker(ABC):
                                 and getattr(event, "severity", "") == "error"
                                 and not fatal_error_event.is_set()
                             ):
-                                fatal_error_event.set()
-                                fatal_error_message.append(
-                                    getattr(event, "message", "Error event in stdout")
-                                )
-                                logger.warning(
-                                    f"[FATAL ERROR] Detected error event in stdout: "
-                                    f"{fatal_error_message[0][:100]}"
-                                )
+                                error_msg = getattr(event, "message", "")
+                                # 检查是否是可忽略的错误（如重连消息）
+                                if not self._is_ignorable_error(error_msg):
+                                    fatal_error_event.set()
+                                    fatal_error_message.append(
+                                        error_msg or "Error event in stdout"
+                                    )
+                                    logger.warning(
+                                        f"[FATAL ERROR] Detected error event in stdout: "
+                                        f"{fatal_error_message[0][:100]}"
+                                    )
+                                else:
+                                    logger.debug(f"Ignoring transient error: {error_msg[:100]}")
 
                             # 消息累积逻辑：合并连续的 delta 消息
                             is_delta_message = (
@@ -1187,6 +1192,19 @@ class CLIInvoker(ABC):
         默认实现为空（无额外检查）。
         """
         pass
+
+    def _is_ignorable_error(self, error_msg: str) -> bool:
+        """检查错误消息是否可忽略（如重连消息）。
+
+        子类可以覆盖此方法来定义可忽略的错误模式。
+
+        Args:
+            error_msg: 错误消息
+
+        Returns:
+            True 如果错误可忽略，False 否则
+        """
+        return False
 
     def _send_error_event(
         self,
