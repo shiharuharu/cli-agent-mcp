@@ -3,7 +3,7 @@
 使用 XML-wrapped Markdown 格式，对 LLM 友好。
 
 格式说明:
-    - <thought_process>: 中间思考过程（full_output=True 时输出）
+    - <thought_process>: 中间思考过程（verbose_output=True 时输出）
     - <answer>: 最终答案
     - <debug_info>: 调试信息（debug=True 时输出）
 """
@@ -56,7 +56,7 @@ class ResponseData:
     # 会话 ID（用于继续对话）
     session_id: str = ""
 
-    # 中间思考过程（可选，full_output 时使用）
+    # 中间思考过程（可选，verbose_output 时使用）
     thought_steps: list[str] = field(default_factory=list)
 
     # 调试信息（可选，debug 时使用）
@@ -81,21 +81,21 @@ class ResponseFormatter:
         ...     thought_steps=["分析步骤1...", "分析步骤2..."],
         ...     debug_info=DebugInfo(model="gpt-4", duration_sec=1.5)
         ... )
-        >>> output = formatter.format(data, full_output=True, debug=True)
+        >>> output = formatter.format(data, verbose_output=True, debug=True)
     """
 
     def format(
         self,
         data: ResponseData,
         *,
-        full_output: bool = False,
+        verbose_output: bool = False,
         debug: bool = False,
     ) -> str:
         """格式化响应数据。
 
         Args:
             data: 响应数据
-            full_output: 是否输出完整的思考过程
+            verbose_output: 是否输出完整的思考过程
             debug: 是否输出调试信息
 
         Returns:
@@ -110,8 +110,8 @@ class ResponseFormatter:
 
         parts = ["<response>"]
 
-        # 1. 思考过程（full_output 时输出）
-        if full_output and data.thought_steps:
+        # 1. 思考过程（verbose_output 时输出）
+        if verbose_output and data.thought_steps:
             parts.append(self._format_thought_process(data.thought_steps))
 
         # 2. 最终答案
@@ -133,7 +133,7 @@ class ResponseFormatter:
         self,
         data: ResponseData,
         *,
-        full_output: bool = False,
+        verbose_output: bool = False,
     ) -> str:
         """格式化用于保存到文件的内容。
 
@@ -141,7 +141,7 @@ class ResponseFormatter:
 
         Args:
             data: 响应数据
-            full_output: 是否输出完整的思考过程
+            verbose_output: 是否输出完整的思考过程
 
         Returns:
             纯 Markdown 格式的内容（无 XML 包装）
@@ -151,8 +151,8 @@ class ResponseFormatter:
 
         parts = []
 
-        # 1. 思考过程（full_output 时输出）
-        if full_output and data.thought_steps:
+        # 1. 思考过程（verbose_output 时输出）
+        if verbose_output and data.thought_steps:
             parts.append("## Thought Process\n")
             for i, step in enumerate(data.thought_steps, 1):
                 parts.append(f"### Step {i}\n")
@@ -160,7 +160,7 @@ class ResponseFormatter:
                 parts.append("\n")
 
         # 2. 最终答案
-        if full_output and data.thought_steps:
+        if verbose_output and data.thought_steps:
             parts.append("## Answer\n")
         parts.append(data.answer)
 
