@@ -79,7 +79,7 @@ class CommonParams:
         permission: 读写权限
         session_id: 恢复指定会话
         model: 模型选择
-        full_output: 返回完整过程信息
+        verbose_output: 返回完整过程信息
         task_note: 任务备注，用于 GUI 显示
         task_tags: 任务标签列表
     """
@@ -89,7 +89,7 @@ class CommonParams:
     permission: Permission = Permission.READ_ONLY
     session_id: str = ""
     model: str = ""
-    full_output: bool = False
+    verbose_output: bool = False
     task_note: str = ""
     task_tags: list[str] = field(default_factory=list)
 
