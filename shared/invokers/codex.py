@@ -51,6 +51,11 @@ class CodexInvoker(CLIInvoker):
         ))
     """
 
+    # Codex 特有：可忽略的警告消息（如果有实际内容则不视为错误）
+    _IGNORABLE_WARNINGS = [
+        "Long conversations and multiple compactions",
+    ]
+
     def __init__(
         self,
         codex_path: str = "codex",
@@ -135,3 +140,20 @@ class CodexInvoker(CLIInvoker):
                 thread_id = raw.get("thread_id", "")
                 if thread_id:
                     self._session_id = thread_id
+
+    def _check_execution_errors(self, stderr_content: str = "") -> None:
+        """检查 Codex 执行错误，处理可忽略的警告。
+
+        Codex 有时会输出 "Long conversations and multiple compactions" 警告，
+        这不是真正的错误。如果有实际内容，应该返回内容而不是错误。
+        """
+        if not self._exit_error:
+            return
+
+        # 检查是否是可忽略的警告
+        for warning in self._IGNORABLE_WARNINGS:
+            if warning in self._exit_error:
+                # 如果有实际内容，清除错误
+                if self._final_answer and self._final_answer.strip():
+                    self._exit_error = None
+                    return

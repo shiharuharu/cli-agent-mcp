@@ -123,14 +123,14 @@ class TestCommonParams:
             permission=Permission.WORKSPACE_WRITE,
             session_id="session-123",
             model="gpt-4",
-            full_output=True,
+            verbose_output=True,
             task_note="[Test] Unit test",
             task_tags=["test", "unit"],
         )
         assert params.permission == Permission.WORKSPACE_WRITE
         assert params.session_id == "session-123"
         assert params.model == "gpt-4"
-        assert params.full_output is True
+        assert params.verbose_output is True
         assert params.task_note == "[Test] Unit test"
         assert params.task_tags == ["test", "unit"]
 
