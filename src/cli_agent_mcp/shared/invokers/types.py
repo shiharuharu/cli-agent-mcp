@@ -242,7 +242,7 @@ class ExecutionResult:
         agent_messages: 最终答案（最后一条 agent 回复）
         thought_steps: 中间思考步骤（除最后一条外的 agent 消息）
         error: 错误信息（仅失败时）
-        all_messages: 完整消息列表（仅 full_output=True）
+        all_messages: 完整消息列表（仅 verbose_output=True）
         log_file: 日志文件路径
         gui_metadata: GUI 元数据
         debug_info: 调试信息（仅 debug=True）
