@@ -69,6 +69,8 @@ class GUIServer:
             (self.config.host, self.config.port), handler
         )
         self._server.allow_reuse_address = True
+        self._server.daemon_threads = True  # SSE 线程不阻塞进程退出
+        self._server.block_on_close = False  # stop() 不等待线程结束
 
         self._actual_port = self._server.server_address[1]
 

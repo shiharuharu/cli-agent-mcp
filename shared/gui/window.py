@@ -208,7 +208,13 @@ class LiveViewer:
 
             def on_closed():
                 self._closed.set()
-                self._queue.put(None)
+                try:
+                    self._queue.put_nowait(None)  # 非阻塞，避免死锁
+                except queue.Full:
+                    pass
+                # 停止 HTTP 服务器
+                if self._server:
+                    self._server.stop()
 
             self._window.events.loaded += on_loaded
             self._window.events.closed += on_closed
@@ -239,6 +245,9 @@ class LiveViewer:
         """所有客户端断开时的回调"""
         logger.info("All clients disconnected")
         self._closed.set()
+        # 停止 HTTP 服务器
+        if self._server:
+            self._server.stop()
 
     def _poll_queue_loop(self) -> None:
         """后台轮询线程主循环 - 不再依赖 self._window"""

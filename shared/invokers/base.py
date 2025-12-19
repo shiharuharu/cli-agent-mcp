@@ -708,6 +708,21 @@ class CLIInvoker(ABC):
                         # 解析为统一事件
                         events = self._parse_raw_data(parser, data)
                         for event in events:
+                            # 检测 stdout 中的 error 事件（如 item.type=error）
+                            if (
+                                event.category.value == "system"
+                                and getattr(event, "severity", "") == "error"
+                                and not fatal_error_event.is_set()
+                            ):
+                                fatal_error_event.set()
+                                fatal_error_message.append(
+                                    getattr(event, "message", "Error event in stdout")
+                                )
+                                logger.warning(
+                                    f"[FATAL ERROR] Detected error event in stdout: "
+                                    f"{fatal_error_message[0][:100]}"
+                                )
+
                             # 消息累积逻辑：合并连续的 delta 消息
                             is_delta_message = (
                                 event.category.value == "message"

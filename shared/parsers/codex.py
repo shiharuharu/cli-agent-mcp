@@ -192,7 +192,16 @@ class CodexParser:
             self._item_states[item_id] = item
 
         # 根据 item.type 分发
-        if item_type == "agent_message":
+        if item_type == "error":
+            # item.completed 中的 error 类型（如 context limit warning）
+            return SystemEvent(
+                event_id=make_event_id("codex", "item_error"),
+                severity="error",
+                message=item.get("message") or item.get("text", "Unknown error"),
+                session_id=self.session_id,
+                **base,
+            )
+        elif item_type == "agent_message":
             return self._parse_agent_message(item, is_completed, base)
         elif item_type == "reasoning":
             return self._parse_reasoning(item, is_completed, base)
