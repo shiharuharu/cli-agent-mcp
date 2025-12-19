@@ -157,8 +157,11 @@ COMMON_PROPERTIES = {
         "default": "",
         "description": (
             "Session ID for multi-turn conversations. "
-            "Provide existing ID to restore memory. "
-            "Leave EMPTY to start a FRESH session (ignoring history)."
+            "This tool returns the ID in <continuation_id>...</continuation_id> on success. "
+            "If user request is a follow-up (e.g., 'continue', 'based on previous', 'modify the result'), "
+            "you MUST pass the MOST RECENT ID from THIS SAME tool to restore context. "
+            "Leave empty ONLY for unrelated tasks or explicit fresh start. "
+            "Do NOT reuse IDs across different tools (codex/gemini/claude/opencode)."
         ),
     },
     "permission": {
