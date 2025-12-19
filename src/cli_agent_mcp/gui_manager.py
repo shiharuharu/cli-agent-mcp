@@ -316,6 +316,8 @@ class GUIManager:
             # KEEP_GUI=true 时禁用心跳检测，GUI 不会因心跳超时而关闭
             heartbeat_queue = None if self.config.keep_on_exit else self._heartbeat_queue
 
+            # daemon=True: 默认随主进程退出（避免进程驻留）
+            # daemon=False: keep_on_exit 时保留 GUI
             self._process = mp.Process(
                 target=_gui_process_entry,
                 args=(
@@ -326,7 +328,7 @@ class GUIManager:
                     self._url_queue,
                     config_dict,
                 ),
-                daemon=False,  # 不自动随主进程死亡
+                daemon=not self.config.keep_on_exit,
                 name="gui_process",
             )
             self._process.start()
