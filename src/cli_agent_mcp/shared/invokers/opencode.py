@@ -201,26 +201,30 @@ class OpencodeInvoker(CLIInvoker):
         Returns:
             (error_type, error_message) 元组，如果不是错误行则返回 None
         """
-        # 累积所有非 JSON 行（可能是错误堆栈跟踪的一部分）
-        self._error_accumulator.append(line)
-
         # 检查是否是主错误行（如 ProviderModelNotFoundError: ...）
         match = re.match(r'^(\w+Error):\s*(.*)$', line)
         if match:
             error_name = match.group(1)
             error_msg = match.group(2) or error_name
             self._in_error_block = True
+            self._error_accumulator.append(line)
             return (error_name, error_msg)
 
-        # 检查 throw 语句
+        # 检查 throw 语句 - 开始错误块
         if 'throw new' in line:
             self._in_error_block = True
-            # 不返回，等待主错误行
+            self._error_accumulator.append(line)
+            return None
 
         # 检查是否是源代码行（带行号），表示错误开始
         if re.match(r'^\d+\s*\|', line):
             self._in_error_block = True
-            # 不返回，等待主错误行
+            self._error_accumulator.append(line)
+            return None
+
+        # 只有在错误块内才累积其他行
+        if self._in_error_block:
+            self._error_accumulator.append(line)
 
         return None
 
@@ -230,6 +234,9 @@ class OpencodeInvoker(CLIInvoker):
         OpenCode 的 session_id 在事件的 sessionID 字段中。
         """
         super()._process_event(event, params)
+
+        # JSON 流恢复，重置错误块状态
+        self._in_error_block = False
 
         # 从事件中提取 session_id
         if not self._session_id:
@@ -256,12 +263,8 @@ class OpencodeInvoker(CLIInvoker):
         if self._exit_error:
             return
 
-        # 检查是否有累积的错误（来自 stdout）
-        if self._error_accumulator:
-            # 合并累积的错误
-            full_error = '\n'.join(self._error_accumulator)
-            self._captured_errors.append(full_error)
-            self._error_accumulator = []
+        # 清空累积器（不再自动提升为错误）
+        self._error_accumulator = []
 
         # 优先检查 stderr（opencode 的某些错误输出到 stderr）
         if stderr_content.strip():
@@ -274,6 +277,7 @@ class OpencodeInvoker(CLIInvoker):
             return
 
         # 如果 stderr 为空，检查 stdout 中捕获的错误
+        # 只有当 _extract_error_from_line 返回了实际错误时才会有 _captured_errors
         if self._captured_errors:
             # 构建错误信息
             error_msg = f"OpenCode error (exit code 0):\n"

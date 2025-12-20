@@ -200,6 +200,7 @@ class DebugInfo:
         tool_call_count: 工具调用次数
         input_tokens: 输入 token 数（如果可用）
         output_tokens: 输出 token 数（如果可用）
+        cached_input_tokens: 缓存输入 token 数（如果可用）
         exit_code: CLI 退出码（仅当非零时有意义）
         cancelled: 是否被取消
     """
@@ -210,6 +211,7 @@ class DebugInfo:
     tool_call_count: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
+    cached_input_tokens: int = 0
     exit_code: int | None = None
     cancelled: bool = False
 
@@ -222,6 +224,7 @@ class DebugInfo:
             "tool_call_count": self.tool_call_count,
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
+            "cached_input_tokens": self.cached_input_tokens,
         }
         if self.exit_code is not None:
             result["exit_code"] = self.exit_code

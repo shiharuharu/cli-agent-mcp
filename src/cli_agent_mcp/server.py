@@ -148,7 +148,7 @@ COMMON_PROPERTIES = {
         "type": "string",
         "description": (
             "Project root directory. Boundary for 'workspace-write'. "
-            "Defaults to server CWD. Use absolute paths or relative paths."
+            "Use absolute paths or relative paths."
         ),
     },
     # === 常用参数 ===
@@ -603,7 +603,7 @@ def create_server(
                     )
 
                     # 添加 XML wrapper（如果启用）
-                    if args.get("save_file_with_wrapper", False):
+                    if arguments.get("save_file_with_wrapper", False):
                         continuation_id = result.session_id or ""
                         file_content = (
                             f'<agent-output agent="{name}" continuation_id="{continuation_id}">\n'
@@ -613,7 +613,7 @@ def create_server(
 
                     # 追加或覆盖
                     file_path = Path(save_file_path)
-                    if args.get("save_file_with_append_mode", False) and file_path.exists():
+                    if arguments.get("save_file_with_append_mode", False) and file_path.exists():
                         with file_path.open("a", encoding="utf-8") as f:
                             f.write("\n" + file_content)
                         logger.info(f"Appended output to: {save_file_path}")

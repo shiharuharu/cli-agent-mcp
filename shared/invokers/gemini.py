@@ -30,15 +30,20 @@ from .types import (
 
 __all__ = ["GeminiInvoker"]
 
-# Gemini 默认允许的工具列表
-GEMINI_ALLOWED_TOOLS = [
-    "replace",
+# Gemini 只读工具列表
+GEMINI_READ_ONLY_TOOLS = [
     "glob",
     "read_file",
     "list_directory",
     "search_file_content",
-    "run_shell_command",
+]
+
+# Gemini 完整工具列表（包含写操作）
+GEMINI_ALL_TOOLS = [
+    *GEMINI_READ_ONLY_TOOLS,
+    "replace",
     "write_file",
+    "run_shell_command",
     "write_todos",
 ]
 
@@ -103,8 +108,14 @@ class GeminiInvoker(CLIInvoker):
         if params.permission != Permission.UNLIMITED:
             cmd.append("--sandbox")
 
-        # 允许的工具列表（显式指定以确保一致性）
-        cmd.extend(["--allowed-tools", ",".join(GEMINI_ALLOWED_TOOLS)])
+        # 允许的工具列表（基于权限级别）
+        # read-only: 只允许读取类工具
+        # workspace-write/unlimited: 允许所有工具
+        if params.permission == Permission.READ_ONLY:
+            allowed_tools = GEMINI_READ_ONLY_TOOLS
+        else:
+            allowed_tools = GEMINI_ALL_TOOLS
+        cmd.extend(["--allowed-tools", ",".join(allowed_tools)])
 
         # 可选：模型
         if params.model:

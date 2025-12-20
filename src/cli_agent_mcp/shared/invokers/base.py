@@ -1010,12 +1010,14 @@ class CLIInvoker(ABC):
                 self._debug_info.model = model
 
         # Token 统计
-        stats = raw.get("stats", {})
+        stats = raw.get("stats") or raw.get("usage") or {}
         if stats:
             if stats.get("input_tokens"):
                 self._debug_info.input_tokens = stats["input_tokens"]
             if stats.get("output_tokens"):
                 self._debug_info.output_tokens = stats["output_tokens"]
+            if stats.get("cached_input_tokens"):
+                self._debug_info.cached_input_tokens = stats["cached_input_tokens"]
             # Gemini 格式
             if stats.get("total_input_tokens"):
                 self._debug_info.input_tokens = stats["total_input_tokens"]
