@@ -63,7 +63,7 @@ TOOL_DESCRIPTIONS = {
     "codex": """Invoke OpenAI Codex CLI agent for deep code analysis and critical review.
 
 IMPORTANT: This agent has ISOLATED context - it cannot see outputs from gemini/claude/opencode.
-To share findings between agents, you must explicitly include them in the prompt.
+TIP: To share findings between agents, use save_file to persist output, then pass the file path via context_paths to the other agent.
 
 CAPABILITIES:
 - Strongest deep analysis and reflection abilities
@@ -84,7 +84,7 @@ SUPPORTS: Image attachments for UI/screenshot analysis""",
     "gemini": """Invoke Google Gemini CLI agent for UI design and comprehensive analysis.
 
 IMPORTANT: This agent has ISOLATED context - it cannot see outputs from codex/claude/opencode.
-To share findings between agents, you must explicitly include them in the prompt.
+TIP: To share findings between agents, use save_file to persist output, then pass the file path via context_paths to the other agent.
 
 CAPABILITIES:
 - Strongest UI design and image understanding abilities
@@ -104,7 +104,7 @@ BEST PRACTICES:
     "claude": """Invoke Anthropic Claude CLI agent for code implementation.
 
 IMPORTANT: This agent has ISOLATED context - it cannot see outputs from codex/gemini/opencode.
-To share findings between agents, you must explicitly include them in the prompt.
+TIP: To share findings between agents, use save_file to persist output, then pass the file path via context_paths to the other agent.
 
 CAPABILITIES:
 - Strongest code writing and implementation abilities
@@ -125,7 +125,7 @@ SUPPORTS: Custom system prompts via system_prompt or append_system_prompt, agent
     "opencode": """Invoke OpenCode CLI agent for full-stack development.
 
 IMPORTANT: This agent has ISOLATED context - it cannot see outputs from codex/gemini/claude.
-To share findings between agents, you must explicitly include them in the prompt.
+TIP: To share findings between agents, use save_file to persist output, then pass the file path via context_paths to the other agent.
 
 CAPABILITIES:
 - Excellent at rapid prototyping and development tasks
