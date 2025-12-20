@@ -78,10 +78,10 @@ pip install -e .
 | `permission` | string | | `read-only` | 权限级别：`read-only`、`workspace-write`、`unlimited` |
 | `model` | string | | `""` | 模型覆盖（仅在明确请求时指定） |
 | `save_file` | string | | `""` | 将代理输出保存到文件路径 |
-| `save_file_with_prompt` | boolean | | `false` | 注入提示词引导模型输出详细思维过程 |
+| `report_mode` | boolean | | `false` | 生成独立报告格式 |
 | `save_file_with_wrapper` | boolean | | `false` | 用 `<agent-output>` XML 标签包裹输出 |
 | `save_file_with_append_mode` | boolean | | `false` | 追加到文件而非覆盖 |
-| `full_output` | boolean | | `false` | 返回包含推理过程的详细输出 |
+| `verbose_output` | boolean | | `false` | 返回包含推理过程的详细输出 |
 | `context_paths` | array | | `[]` | 提供上下文的参考文件/目录路径 |
 | `image` | array | | `[]` | 用于视觉上下文的图片文件绝对路径 |
 | `task_note` | string | | `""` | GUI 显示标签 |
@@ -101,10 +101,10 @@ pip install -e .
 | `permission` | string | | `read-only` | 权限级别：`read-only`、`workspace-write`、`unlimited` |
 | `model` | string | | `""` | 模型覆盖 |
 | `save_file` | string | | `""` | 将代理输出保存到文件路径 |
-| `save_file_with_prompt` | boolean | | `false` | 注入提示词引导模型输出详细思维过程 |
+| `report_mode` | boolean | | `false` | 生成独立报告格式 |
 | `save_file_with_wrapper` | boolean | | `false` | 用 `<agent-output>` XML 标签包裹输出 |
 | `save_file_with_append_mode` | boolean | | `false` | 追加到文件而非覆盖 |
-| `full_output` | boolean | | `false` | 返回包含推理过程的详细输出 |
+| `verbose_output` | boolean | | `false` | 返回包含推理过程的详细输出 |
 | `context_paths` | array | | `[]` | 提供上下文的参考文件/目录路径 |
 | `task_note` | string | | `""` | GUI 显示标签 |
 | `debug` | boolean | | (全局) | 覆盖此次调用的调试设置 |
@@ -123,10 +123,10 @@ pip install -e .
 | `permission` | string | | `read-only` | 权限级别：`read-only`、`workspace-write`、`unlimited` |
 | `model` | string | | `""` | 模型覆盖（`sonnet`、`opus` 或完整模型名） |
 | `save_file` | string | | `""` | 将代理输出保存到文件路径 |
-| `save_file_with_prompt` | boolean | | `false` | 注入提示词引导模型输出详细思维过程 |
+| `report_mode` | boolean | | `false` | 生成独立报告格式 |
 | `save_file_with_wrapper` | boolean | | `false` | 用 `<agent-output>` XML 标签包裹输出 |
 | `save_file_with_append_mode` | boolean | | `false` | 追加到文件而非覆盖 |
-| `full_output` | boolean | | `false` | 返回包含推理过程的详细输出 |
+| `verbose_output` | boolean | | `false` | 返回包含推理过程的详细输出 |
 | `context_paths` | array | | `[]` | 提供上下文的参考文件/目录路径 |
 | `system_prompt` | string | | `""` | 完全替换默认系统提示 |
 | `append_system_prompt` | string | | `""` | 追加到默认提示的额外指令 |
@@ -148,23 +148,29 @@ pip install -e .
 | `permission` | string | | `read-only` | 权限级别：`read-only`、`workspace-write`、`unlimited` |
 | `model` | string | | `""` | 模型覆盖（格式：`provider/model`） |
 | `save_file` | string | | `""` | 将代理输出保存到文件路径 |
-| `save_file_with_prompt` | boolean | | `false` | 注入提示词引导模型输出详细思维过程 |
+| `report_mode` | boolean | | `false` | 生成独立报告格式 |
 | `save_file_with_wrapper` | boolean | | `false` | 用 `<agent-output>` XML 标签包裹输出 |
 | `save_file_with_append_mode` | boolean | | `false` | 追加到文件而非覆盖 |
-| `full_output` | boolean | | `false` | 返回包含推理过程的详细输出 |
+| `verbose_output` | boolean | | `false` | 返回包含推理过程的详细输出 |
 | `context_paths` | array | | `[]` | 提供上下文的参考文件/目录路径 |
 | `file` | array | | `[]` | 要附加的文件绝对路径 |
 | `agent` | string | | `build` | 代理类型：`build`、`plan` 等 |
 | `task_note` | string | | `""` | GUI 显示标签 |
 | `debug` | boolean | | (全局) | 覆盖此次调用的调试设置 |
 
+### get_gui_url
+
+获取 GUI 仪表盘 URL。返回实时事件查看器的 HTTP URL。
+
+无需参数。
+
 ## 提示词注入
 
 部分参数会自动向提示词注入额外内容，使用 `<mcp-injection>` XML 标签。这些标签便于调试和定位系统注入的内容。
 
-### `save_file_with_prompt`
+### `report_mode`
 
-当同时设置 `save_file` 和 `save_file_with_prompt` 时，会注入输出格式要求：
+当同时设置 `save_file` 和 `report_mode` 时，会注入输出格式要求：
 
 ```xml
 <你的提示词>
@@ -246,13 +252,45 @@ pip install -e .
 </agent-output>
 ```
 
+## 响应格式
+
+所有响应都使用 XML 格式包装：
+
+### 成功响应
+
+```xml
+<response>
+  <thought_process>...</thought_process>  <!-- 仅当 verbose_output=true -->
+  <answer>
+    代理的响应内容...
+  </answer>
+  <continuation_id>session-id-here</continuation_id>
+  <debug_info>...</debug_info>  <!-- 仅当 debug=true -->
+</response>
+```
+
+### 错误响应
+
+错误响应包含部分进度以便重试：
+
+```xml
+<response>
+  <error>错误信息</error>
+  <thought_process>...</thought_process>  <!-- 错误前收集的步骤 -->
+  <partial_answer>...</partial_answer>    <!-- 部分输出（如有） -->
+  <continuation_id>session-id</continuation_id>
+  <hint>Task failed. Above is the output collected so far. You can send 'continue' with this continuation_id to retry.</hint>
+  <debug_info>...</debug_info>
+</response>
+```
+
 ## 权限级别
 
-| 级别 | 说明 | Codex | Claude | OpenCode |
-|------|------|-------|--------|----------|
-| `read-only` | 只能读取文件 | `--sandbox read-only` | `--tools Read,Grep,Glob` | `edit: deny, bash: deny` |
-| `workspace-write` | 可在工作区内修改文件 | `--sandbox workspace-write` | `--tools Read,Edit,Write,Bash` | `edit: allow, bash: ask` |
-| `unlimited` | 完全系统访问（谨慎使用） | `--sandbox danger-full-access` | `--tools default` | `edit: allow, bash: allow` |
+| 级别 | 说明 | Codex | Gemini | Claude | OpenCode |
+|------|------|-------|--------|--------|----------|
+| `read-only` | 只能读取文件 | `--sandbox read-only` | 仅只读工具 | `--tools Read,Grep,Glob` | `edit: deny, bash: deny` |
+| `workspace-write` | 可在工作区内修改文件 | `--sandbox workspace-write` | 全部工具 + sandbox | `--tools Read,Edit,Write,Bash` | `edit: allow, bash: ask` |
+| `unlimited` | 完全系统访问（谨慎使用） | `--sandbox danger-full-access` | 全部工具，无 sandbox | `--tools default` | `edit: allow, bash: allow` |
 
 ## 调试模式
 
