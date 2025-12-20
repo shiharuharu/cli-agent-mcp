@@ -62,6 +62,9 @@ logger = logging.getLogger(__name__)
 TOOL_DESCRIPTIONS = {
     "codex": """Invoke OpenAI Codex CLI agent for deep code analysis and critical review.
 
+IMPORTANT: This agent has ISOLATED context - it cannot see outputs from gemini/claude/opencode.
+To share findings between agents, you must explicitly include them in the prompt.
+
 CAPABILITIES:
 - Strongest deep analysis and reflection abilities
 - Excellent at finding issues, edge cases, and potential bugs
@@ -80,6 +83,9 @@ SUPPORTS: Image attachments for UI/screenshot analysis""",
 
     "gemini": """Invoke Google Gemini CLI agent for UI design and comprehensive analysis.
 
+IMPORTANT: This agent has ISOLATED context - it cannot see outputs from codex/claude/opencode.
+To share findings between agents, you must explicitly include them in the prompt.
+
 CAPABILITIES:
 - Strongest UI design and image understanding abilities
 - Excellent at rapid UI prototyping and visual tasks
@@ -96,6 +102,9 @@ BEST PRACTICES:
 - Good first choice for "understand this codebase" tasks""",
 
     "claude": """Invoke Anthropic Claude CLI agent for code implementation.
+
+IMPORTANT: This agent has ISOLATED context - it cannot see outputs from codex/gemini/opencode.
+To share findings between agents, you must explicitly include them in the prompt.
 
 CAPABILITIES:
 - Strongest code writing and implementation abilities
@@ -114,6 +123,9 @@ BEST PRACTICES:
 SUPPORTS: Custom system prompts via system_prompt or append_system_prompt, agent selection via agent parameter""",
 
     "opencode": """Invoke OpenCode CLI agent for full-stack development.
+
+IMPORTANT: This agent has ISOLATED context - it cannot see outputs from codex/gemini/claude.
+To share findings between agents, you must explicitly include them in the prompt.
 
 CAPABILITIES:
 - Excellent at rapid prototyping and development tasks
@@ -156,12 +168,11 @@ COMMON_PROPERTIES = {
         "type": "string",
         "default": "",
         "description": (
-            "Session ID for multi-turn conversations. "
-            "This tool returns the ID in <continuation_id>...</continuation_id> on success. "
-            "If user request is a follow-up (e.g., 'continue', 'based on previous', 'modify the result'), "
-            "you MUST pass the MOST RECENT ID from THIS SAME tool to restore context. "
-            "Leave empty ONLY for unrelated tasks or explicit fresh start. "
-            "Do NOT reuse IDs across different tools (codex/gemini/claude/opencode)."
+            "Session ID for multi-turn conversations WITHIN THE SAME AGENT. "
+            "Returns ID in <continuation_id>...</continuation_id> on success. "
+            "CRITICAL: IDs are agent-specific and NOT transferable. "
+            "A codex continuation_id CANNOT be used with gemini/claude/opencode. "
+            "Each agent maintains completely isolated conversation history."
         ),
     },
     "permission": {
