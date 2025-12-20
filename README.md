@@ -78,10 +78,10 @@ Invoke OpenAI Codex CLI agent for deep code analysis and critical review.
 | `permission` | string | | `read-only` | Permission level: `read-only`, `workspace-write`, `unlimited` |
 | `model` | string | | `""` | Model override (only specify if explicitly requested) |
 | `save_file` | string | | `""` | Save agent output to file path |
-| `save_file_with_prompt` | boolean | | `false` | Inject prompt hint to encourage verbose reasoning output |
+| `report_mode` | boolean | | `false` | Generate standalone report format |
 | `save_file_with_wrapper` | boolean | | `false` | Wrap output with `<agent-output>` XML tags |
 | `save_file_with_append_mode` | boolean | | `false` | Append to file instead of overwriting |
-| `full_output` | boolean | | `false` | Return detailed output including reasoning |
+| `verbose_output` | boolean | | `false` | Return detailed output including reasoning |
 | `context_paths` | array | | `[]` | Reference file/directory paths to provide context |
 | `image` | array | | `[]` | Absolute paths to image files for visual context |
 | `task_note` | string | | `""` | Display label for GUI |
@@ -101,10 +101,10 @@ Invoke Google Gemini CLI agent for UI design and comprehensive analysis.
 | `permission` | string | | `read-only` | Permission level: `read-only`, `workspace-write`, `unlimited` |
 | `model` | string | | `""` | Model override |
 | `save_file` | string | | `""` | Save agent output to file path |
-| `save_file_with_prompt` | boolean | | `false` | Inject prompt hint to encourage verbose reasoning output |
+| `report_mode` | boolean | | `false` | Generate standalone report format |
 | `save_file_with_wrapper` | boolean | | `false` | Wrap output with `<agent-output>` XML tags |
 | `save_file_with_append_mode` | boolean | | `false` | Append to file instead of overwriting |
-| `full_output` | boolean | | `false` | Return detailed output including reasoning |
+| `verbose_output` | boolean | | `false` | Return detailed output including reasoning |
 | `context_paths` | array | | `[]` | Reference file/directory paths to provide context |
 | `task_note` | string | | `""` | Display label for GUI |
 | `debug` | boolean | | (global) | Override debug setting for this call |
@@ -123,10 +123,10 @@ Invoke Anthropic Claude CLI agent for code implementation.
 | `permission` | string | | `read-only` | Permission level: `read-only`, `workspace-write`, `unlimited` |
 | `model` | string | | `""` | Model override (`sonnet`, `opus`, or full model name) |
 | `save_file` | string | | `""` | Save agent output to file path |
-| `save_file_with_prompt` | boolean | | `false` | Inject prompt hint to encourage verbose reasoning output |
+| `report_mode` | boolean | | `false` | Generate standalone report format |
 | `save_file_with_wrapper` | boolean | | `false` | Wrap output with `<agent-output>` XML tags |
 | `save_file_with_append_mode` | boolean | | `false` | Append to file instead of overwriting |
-| `full_output` | boolean | | `false` | Return detailed output including reasoning |
+| `verbose_output` | boolean | | `false` | Return detailed output including reasoning |
 | `context_paths` | array | | `[]` | Reference file/directory paths to provide context |
 | `system_prompt` | string | | `""` | Complete replacement for the default system prompt |
 | `append_system_prompt` | string | | `""` | Additional instructions appended to default prompt |
@@ -148,23 +148,29 @@ Invoke OpenCode CLI agent for full-stack development.
 | `permission` | string | | `read-only` | Permission level: `read-only`, `workspace-write`, `unlimited` |
 | `model` | string | | `""` | Model override (format: `provider/model`) |
 | `save_file` | string | | `""` | Save agent output to file path |
-| `save_file_with_prompt` | boolean | | `false` | Inject prompt hint to encourage verbose reasoning output |
+| `report_mode` | boolean | | `false` | Generate standalone report format |
 | `save_file_with_wrapper` | boolean | | `false` | Wrap output with `<agent-output>` XML tags |
 | `save_file_with_append_mode` | boolean | | `false` | Append to file instead of overwriting |
-| `full_output` | boolean | | `false` | Return detailed output including reasoning |
+| `verbose_output` | boolean | | `false` | Return detailed output including reasoning |
 | `context_paths` | array | | `[]` | Reference file/directory paths to provide context |
 | `file` | array | | `[]` | Absolute paths to files to attach |
 | `agent` | string | | `build` | Agent type: `build`, `plan`, etc. |
 | `task_note` | string | | `""` | Display label for GUI |
 | `debug` | boolean | | (global) | Override debug setting for this call |
 
+### get_gui_url
+
+Get the GUI dashboard URL. Returns the HTTP URL where the live event viewer is accessible.
+
+No parameters required.
+
 ## Prompt Injection
 
 Some parameters automatically inject additional content into the prompt using `<mcp-injection>` XML tags. These tags make it easy to debug and identify system-injected content.
 
-### `save_file_with_prompt`
+### `report_mode`
 
-When `save_file` and `save_file_with_prompt` are both set, output format requirements are injected:
+When `save_file` and `report_mode` are both set, output format requirements are injected:
 
 ```xml
 <your prompt>
@@ -246,13 +252,45 @@ Implementation summary...
 </agent-output>
 ```
 
+## Response Format
+
+All responses are wrapped in XML format:
+
+### Success Response
+
+```xml
+<response>
+  <thought_process>...</thought_process>  <!-- Only when verbose_output=true -->
+  <answer>
+    Agent's response content...
+  </answer>
+  <continuation_id>session-id-here</continuation_id>
+  <debug_info>...</debug_info>  <!-- Only when debug=true -->
+</response>
+```
+
+### Error Response
+
+Error responses include partial progress to enable retry:
+
+```xml
+<response>
+  <error>Error message</error>
+  <thought_process>...</thought_process>  <!-- Collected steps before error -->
+  <partial_answer>...</partial_answer>    <!-- Partial output if any -->
+  <continuation_id>session-id</continuation_id>
+  <hint>Task failed. Above is the output collected so far. You can send 'continue' with this continuation_id to retry.</hint>
+  <debug_info>...</debug_info>
+</response>
+```
+
 ## Permission Levels
 
-| Level | Description | Codex | Claude | OpenCode |
-|-------|-------------|-------|--------|----------|
-| `read-only` | Can only read files | `--sandbox read-only` | `--tools Read,Grep,Glob` | `edit: deny, bash: deny` |
-| `workspace-write` | Can modify files within workspace | `--sandbox workspace-write` | `--tools Read,Edit,Write,Bash` | `edit: allow, bash: ask` |
-| `unlimited` | Full system access (use with caution) | `--sandbox danger-full-access` | `--tools default` | `edit: allow, bash: allow` |
+| Level | Description | Codex | Gemini | Claude | OpenCode |
+|-------|-------------|-------|--------|--------|----------|
+| `read-only` | Can only read files | `--sandbox read-only` | Read-only tools only | `--tools Read,Grep,Glob` | `edit: deny, bash: deny` |
+| `workspace-write` | Can modify files within workspace | `--sandbox workspace-write` | All tools + sandbox | `--tools Read,Edit,Write,Bash` | `edit: allow, bash: ask` |
+| `unlimited` | Full system access (use with caution) | `--sandbox danger-full-access` | All tools, no sandbox | `--tools default` | `edit: allow, bash: allow` |
 
 ## Debug Mode
 
