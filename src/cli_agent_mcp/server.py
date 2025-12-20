@@ -70,7 +70,15 @@ CROSS-AGENT HANDOFF:
 - Small data: paste into prompt.
 - Large data: save_file -> context_paths -> prompt says "Read <file>".
 
-Best for: bug hunting, edge cases, security review, architectural assessment.
+CAPABILITIES:
+- Strongest deep analysis and reflection abilities
+- Excellent at finding issues, edge cases, and potential bugs
+- Good at critical code review and architectural assessment
+
+BEST PRACTICES:
+- Be explicit about scope: "Only fix X, don't refactor Y"
+- Specify constraints: "Keep it simple, no new abstractions"
+
 Supports: image attachments.""",
 
     "gemini": """Run Google Gemini CLI agent (UI design / comprehensive analysis).
@@ -83,8 +91,15 @@ CROSS-AGENT HANDOFF:
 - Small data: paste into prompt.
 - Large data: save_file -> context_paths -> prompt says "Read <file>".
 
-Best for: UI mockups, image analysis, requirement discovery, full-text detective work.
-Note: verbose_output=true recommended for research tasks.""",
+CAPABILITIES:
+- Strongest UI design and image understanding abilities
+- Excellent at rapid UI prototyping and visual tasks
+- Great at inferring original requirements from code clues
+- Best for full-text analysis and detective work
+
+BEST PRACTICES:
+- Enable verbose_output when doing research or analysis
+- Good first choice for "understand this codebase" tasks""",
 
     "claude": """Run Anthropic Claude CLI agent (code implementation).
 
@@ -96,7 +111,15 @@ CROSS-AGENT HANDOFF:
 - Small data: paste into prompt.
 - Large data: save_file -> context_paths -> prompt says "Read <file>".
 
-Best for: feature implementation, refactoring, code generation.
+CAPABILITIES:
+- Strongest code writing and implementation abilities
+- Excellent at translating requirements into working code
+- Good at following patterns and conventions
+
+BEST PRACTICES:
+- Be explicit about target: "Replace old implementation completely"
+- Specify cleanup: "Remove deprecated code paths"
+
 Supports: system_prompt, append_system_prompt, agent parameter.""",
 
     "opencode": """Run OpenCode CLI agent (full-stack development).
@@ -109,7 +132,15 @@ CROSS-AGENT HANDOFF:
 - Small data: paste into prompt.
 - Large data: save_file -> context_paths -> prompt says "Read <file>".
 
-Best for: rapid prototyping, multi-framework projects.
+CAPABILITIES:
+- Excellent at rapid prototyping and development tasks
+- Good at working with multiple frameworks and tools
+- Supports multiple AI providers (Anthropic, OpenAI, Google, etc.)
+
+BEST PRACTICES:
+- Specify agent type for specialized tasks (e.g., --agent build)
+- Use file attachments for context-heavy tasks
+
 Supports: file attachments, multiple agents (build, plan, etc.).""",
 }
 
