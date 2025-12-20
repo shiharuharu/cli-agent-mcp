@@ -106,6 +106,9 @@ class ResponseFormatter:
                 data.error or "Unknown error",
                 debug=debug,
                 debug_info=data.debug_info,
+                session_id=data.session_id,
+                thought_steps=data.thought_steps,
+                partial_answer=data.answer,
             )
 
         parts = ["<response>"]
@@ -206,6 +209,9 @@ class ResponseFormatter:
         *,
         debug: bool = False,
         debug_info: DebugInfo | None = None,
+        session_id: str = "",
+        thought_steps: list[str] | None = None,
+        partial_answer: str = "",
     ) -> str:
         """格式化错误响应。
 
@@ -213,12 +219,30 @@ class ResponseFormatter:
             error: 错误信息
             debug: 是否输出调试信息
             debug_info: 调试信息（可选）
+            session_id: 会话 ID（用于继续对话）
+            thought_steps: 已收集的思考步骤
+            partial_answer: 已收集的部分答案
 
         Returns:
             XML 格式的错误响应
         """
         parts = ["<response>"]
         parts.append(f"  <error>{error}</error>")
+
+        # 错误时也返回已收集的思考步骤（方便调试和继续）
+        if thought_steps:
+            parts.append(self._format_thought_process(thought_steps))
+
+        # 错误时也返回已收集的部分答案
+        if partial_answer and partial_answer.strip():
+            parts.append(f"  <partial_answer>{partial_answer}</partial_answer>")
+
+        # 错误时也返回 session_id（方便客户端发送"继续"）
+        if session_id:
+            parts.append(f"  <continuation_id>{session_id}</continuation_id>")
+            # 如果有部分输出，提示客户端可以继续
+            if thought_steps or (partial_answer and partial_answer.strip()):
+                parts.append("  <hint>Task failed. Above is the output collected so far. You can send 'continue' with this continuation_id to retry.</hint>")
 
         # 错误情况下也输出 debug_info（如果开启 debug）
         if debug and debug_info:

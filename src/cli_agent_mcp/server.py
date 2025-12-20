@@ -565,10 +565,11 @@ def create_server(
                 )
 
             # 构建 ResponseData（直接使用 invoker 提取的统一数据）
+            # 错误时也尽力返回已收集的内容和 session_id，方便客户端发送"继续"
             response_data = ResponseData(
-                answer=result.agent_messages if result.success else "",
+                answer=result.agent_messages,  # 即使失败也返回已收集的内容
                 session_id=result.session_id or "",
-                thought_steps=result.thought_steps if verbose_output else [],
+                thought_steps=result.thought_steps if (verbose_output or not result.success) else [],
                 debug_info=debug_info,
                 success=result.success,
                 error=result.error,
