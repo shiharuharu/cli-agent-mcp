@@ -60,88 +60,57 @@ logger = logging.getLogger(__name__)
 
 # 工具描述
 TOOL_DESCRIPTIONS = {
-    "codex": """Invoke OpenAI Codex CLI agent for deep code analysis and critical review.
+    "codex": """Run OpenAI Codex CLI agent (deep analysis / critical review).
 
-IMPORTANT: This agent has ISOLATED context - it cannot see outputs from gemini/claude/opencode.
-To share data: include in prompt, OR (easier) use save_file then pass file via context_paths to other agent.
+NO SHARED MEMORY:
+- Cannot see messages/outputs from gemini/claude/opencode.
+- Only sees: (1) this prompt, (2) files in context_paths, (3) its own history via continuation_id.
 
-CAPABILITIES:
-- Strongest deep analysis and reflection abilities
-- Excellent at finding issues, edge cases, and potential bugs
-- Good at critical code review and architectural assessment
+CROSS-AGENT HANDOFF:
+- Small data: paste into prompt.
+- Large data: save_file -> context_paths -> prompt says "Read <file>".
 
-LIMITATIONS:
-- Tends to over-engineer solutions or over-simplify features
-- May suggest unnecessary abstractions
+Best for: bug hunting, edge cases, security review, architectural assessment.
+Supports: image attachments.""",
 
-BEST PRACTICES:
-- Be explicit about scope: "Only fix X, don't refactor Y"
-- Specify constraints: "Keep it simple, no new abstractions"
-- Use for: Code review, bug hunting, security analysis
+    "gemini": """Run Google Gemini CLI agent (UI design / comprehensive analysis).
 
-SUPPORTS: Image attachments for UI/screenshot analysis""",
+NO SHARED MEMORY:
+- Cannot see messages/outputs from codex/claude/opencode.
+- Only sees: (1) this prompt, (2) files in context_paths, (3) its own history via continuation_id.
 
-    "gemini": """Invoke Google Gemini CLI agent for UI design and comprehensive analysis.
+CROSS-AGENT HANDOFF:
+- Small data: paste into prompt.
+- Large data: save_file -> context_paths -> prompt says "Read <file>".
 
-IMPORTANT: This agent has ISOLATED context - it cannot see outputs from codex/claude/opencode.
-To share data: include in prompt, OR (easier) use save_file then pass file via context_paths to other agent.
+Best for: UI mockups, image analysis, requirement discovery, full-text detective work.
+Note: verbose_output=true recommended for research tasks.""",
 
-CAPABILITIES:
-- Strongest UI design and image understanding abilities
-- Excellent at rapid UI prototyping and visual tasks
-- Great at inferring original requirements from code clues
-- Best for full-text analysis and detective work
+    "claude": """Run Anthropic Claude CLI agent (code implementation).
 
-LIMITATIONS:
-- Not good at summarization (outputs can be verbose)
-- May need verbose_output=true for research tasks
+NO SHARED MEMORY:
+- Cannot see messages/outputs from codex/gemini/opencode.
+- Only sees: (1) this prompt, (2) files in context_paths, (3) its own history via continuation_id.
 
-BEST PRACTICES:
-- Use for: UI mockups, image analysis, requirement discovery
-- Enable verbose_output when doing research or analysis
-- Good first choice for "understand this codebase" tasks""",
+CROSS-AGENT HANDOFF:
+- Small data: paste into prompt.
+- Large data: save_file -> context_paths -> prompt says "Read <file>".
 
-    "claude": """Invoke Anthropic Claude CLI agent for code implementation.
+Best for: feature implementation, refactoring, code generation.
+Supports: system_prompt, append_system_prompt, agent parameter.""",
 
-IMPORTANT: This agent has ISOLATED context - it cannot see outputs from codex/gemini/opencode.
-To share data: include in prompt, OR (easier) use save_file then pass file via context_paths to other agent.
+    "opencode": """Run OpenCode CLI agent (full-stack development).
 
-CAPABILITIES:
-- Strongest code writing and implementation abilities
-- Excellent at translating requirements into working code
-- Good at following patterns and conventions
+NO SHARED MEMORY:
+- Cannot see messages/outputs from codex/gemini/claude.
+- Only sees: (1) this prompt, (2) files in context_paths, (3) its own history via continuation_id.
 
-LIMITATIONS:
-- May leave compatibility shims or legacy code paths
-- Sometimes adds unnecessary backwards-compatibility
+CROSS-AGENT HANDOFF:
+- Small data: paste into prompt.
+- Large data: save_file -> context_paths -> prompt says "Read <file>".
 
-BEST PRACTICES:
-- Be explicit about target: "Replace old implementation completely"
-- Specify cleanup: "Remove deprecated code paths"
-- Use for: Feature implementation, refactoring, code generation
-
-SUPPORTS: Custom system prompts via system_prompt or append_system_prompt, agent selection via agent parameter""",
-
-    "opencode": """Invoke OpenCode CLI agent for full-stack development.
-
-IMPORTANT: This agent has ISOLATED context - it cannot see outputs from codex/gemini/claude.
-To share data: include in prompt, OR (easier) use save_file then pass file via context_paths to other agent.
-
-CAPABILITIES:
-- Excellent at rapid prototyping and development tasks
-- Good at working with multiple frameworks and tools
-- Supports multiple AI providers (Anthropic, OpenAI, Google, etc.)
-
-LIMITATIONS:
-- May need explicit model selection for best results
-- Permission system differs from other CLI agents
-
-BEST PRACTICES:
-- Use for: Rapid prototyping, multi-framework projects
-- Specify agent type for specialized tasks (e.g., --agent build)
-- Use file attachments for context-heavy tasks
-
-SUPPORTS: File attachments, multiple agents (build, plan, etc.)""",
+Best for: rapid prototyping, multi-framework projects.
+Supports: file attachments, multiple agents (build, plan, etc.).""",
 }
 
 # 公共参数 schema（按重要性排序）
@@ -168,11 +137,10 @@ COMMON_PROPERTIES = {
         "type": "string",
         "default": "",
         "description": (
-            "Session ID for multi-turn conversations WITHIN THE SAME AGENT. "
-            "Returns ID in <continuation_id>...</continuation_id> on success. "
-            "CRITICAL: IDs are agent-specific and NOT transferable. "
-            "A codex continuation_id CANNOT be used with gemini/claude/opencode. "
-            "Each agent maintains completely isolated conversation history."
+            "Resume session WITHIN THIS TOOL ONLY. "
+            "Use only the <continuation_id> returned by this same tool. "
+            "IDs are agent-specific: codex ID won't work with gemini/claude/opencode. "
+            "Switching agents does NOT sync info; pass updates via prompt or context_paths."
         ),
     },
     "permission": {
