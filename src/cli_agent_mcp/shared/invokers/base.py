@@ -1151,6 +1151,11 @@ class CLIInvoker(ABC):
         if fatal_event.is_set():
             return True
 
+        # 先检查是否是可忽略的错误（如重连消息）
+        if self._is_ignorable_error(line):
+            logger.debug(f"Ignoring transient stderr error: {line[:100]}")
+            return False
+
         # 1. 模式匹配检测
         for pattern in fatal_patterns:
             if pattern.search(line):
