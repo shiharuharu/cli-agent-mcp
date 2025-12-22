@@ -44,6 +44,16 @@ from .shared.response_formatter import (
 SUPPORTED_TOOLS = {"codex", "gemini", "claude", "opencode", "banana", "image"}
 
 
+def _resolve_debug(arguments: dict[str, Any], config: Any) -> bool:
+    """统一解析 debug 开关。
+
+    优先使用 arguments 中显式传入的值，否则跟随 config.debug。
+    """
+    if "debug" in arguments:
+        return bool(arguments["debug"])
+    return config.debug
+
+
 def _format_error_response(error: str) -> list[TextContent]:
     """统一的错误响应格式化函数。
 
@@ -815,29 +825,24 @@ def create_server(
         if is_parallel and base_name not in PARALLEL_SUPPORTED_TOOLS:
             return _format_error_response(f"Tool '{base_name}' does not support parallel mode")
 
-        # Banana 工具使用独立的处理流程
+        # 校验 banana/image 必填参数（在登记前校验，避免无效请求占用 registry）
         if base_name == "banana":
-            # 校验 banana 必填参数
             if not arguments.get("prompt"):
                 return _format_error_response("Missing required argument: 'prompt'")
             if not arguments.get("save_path"):
                 return _format_error_response("Missing required argument: 'save_path'")
             if not arguments.get("task_note"):
                 return _format_error_response("Missing required argument: 'task_note'")
-            return await _handle_banana_tool(arguments, push_user_prompt, push_to_gui, gui_manager)
 
-        # Image 工具使用独立的处理流程
         if base_name == "image":
-            # 校验 image 必填参数
             if not arguments.get("prompt"):
                 return _format_error_response("Missing required argument: 'prompt'")
             if not arguments.get("save_path"):
                 return _format_error_response("Missing required argument: 'save_path'")
             if not arguments.get("task_note"):
                 return _format_error_response("Missing required argument: 'task_note'")
-            return await _handle_image_tool(arguments, push_user_prompt, push_to_gui, gui_manager)
 
-        # 生成请求 ID 并登记（如果 registry 可用）- 覆盖 parallel 和 single 两条路径
+        # 生成请求 ID 并登记（如果 registry 可用）- 统一覆盖所有工具
         task_note = arguments.get("task_note", "") or (
             " + ".join(arguments.get("parallel_task_notes", [])) if is_parallel else ""
         )
@@ -855,10 +860,18 @@ def create_server(
             logger.debug(f"No registry available")
 
         try:
+            # Banana 工具使用独立的处理流程
+            if base_name == "banana":
+                return await _handle_banana_tool(arguments, push_user_prompt, push_to_gui, gui_manager, config)
+
+            # Image 工具使用独立的处理流程
+            if base_name == "image":
+                return await _handle_image_tool(arguments, push_user_prompt, push_to_gui, gui_manager, config)
+
             # Parallel 模式使用独立的处理流程
             if is_parallel:
                 return await _handle_parallel_call(
-                    base_name, arguments, make_event_callback, push_user_prompt, push_to_gui, gui_manager
+                    base_name, arguments, make_event_callback, push_user_prompt, push_to_gui, gui_manager, config
                 )
 
             # 校验 CLI 工具必填参数
@@ -891,7 +904,7 @@ def create_server(
 
             # 获取参数
             verbose_output = arguments.get("verbose_output", False)
-            debug_enabled = arguments.get("debug") if "debug" in arguments else config.debug
+            debug_enabled = _resolve_debug(arguments, config)
             save_file_path = arguments.get("save_file", "")
 
             # 构建 debug_info（当 debug 开启时始终构建，包含 log_file）
@@ -1006,6 +1019,7 @@ async def _handle_banana_tool(
     push_user_prompt: Any,
     push_to_gui: Any,
     gui_manager: Any,
+    config: Any,
 ) -> list[TextContent]:
     """处理 banana 工具调用。
 
@@ -1014,6 +1028,7 @@ async def _handle_banana_tool(
         push_user_prompt: 推送用户 prompt 的函数
         push_to_gui: 推送事件到 GUI 的函数
         gui_manager: GUI 管理器
+        config: 配置对象
 
     Returns:
         TextContent 列表
@@ -1056,8 +1071,9 @@ async def _handle_banana_tool(
             # 返回 XML 响应
             response = result.response_xml
 
-            # 添加 debug_info
-            if result.artifacts:
+            # 添加 debug_info（仅当 debug 开启时）
+            debug_enabled = _resolve_debug(arguments, config)
+            if debug_enabled and result.artifacts:
                 response += (
                     f"\n<debug_info>"
                     f"\n  <image_count>{len(result.artifacts)}</image_count>"
@@ -1069,6 +1085,18 @@ async def _handle_banana_tool(
                 )
 
             # 推送结果到 GUI
+            gui_metadata: dict[str, Any] = {
+                "artifacts": result.artifacts,
+                "task_note": task_note,
+            }
+            if debug_enabled:
+                gui_metadata["debug"] = {
+                    "image_count": len(result.artifacts),
+                    "duration_sec": result.duration_sec,
+                    "model": result.model,
+                    "api_endpoint": result.api_endpoint,
+                    "auth_token": result.auth_token_masked,
+                }
             push_to_gui({
                 "category": "operation",
                 "operation_type": "tool_call",
@@ -1077,17 +1105,7 @@ async def _handle_banana_tool(
                 "name": "banana",
                 "status": "success",
                 "output": response,
-                "metadata": {
-                    "artifacts": result.artifacts,
-                    "task_note": task_note,
-                    "debug": {
-                        "image_count": len(result.artifacts),
-                        "duration_sec": result.duration_sec,
-                        "model": result.model,
-                        "api_endpoint": result.api_endpoint,
-                        "auth_token": result.auth_token_masked,
-                    },
-                },
+                "metadata": gui_metadata,
             })
 
             return [TextContent(type="text", text=response)]
@@ -1108,6 +1126,7 @@ async def _handle_image_tool(
     push_user_prompt: Any,
     push_to_gui: Any,
     gui_manager: Any,
+    config: Any,
 ) -> list[TextContent]:
     """处理 image 工具调用。
 
@@ -1116,6 +1135,7 @@ async def _handle_image_tool(
         push_user_prompt: 推送用户 prompt 的函数
         push_to_gui: 推送事件到 GUI 的函数
         gui_manager: GUI 管理器
+        config: 配置对象
 
     Returns:
         TextContent 列表
@@ -1155,17 +1175,30 @@ async def _handle_image_tool(
             # 返回 XML 响应
             response = result.response_xml
 
-            # 添加 debug_info
-            response += (
-                f"\n<debug_info>"
-                f"\n  <image_count>{len(result.artifacts) if result.artifacts else 0}</image_count>"
-                f"\n  <duration_sec>{result.duration_sec:.3f}</duration_sec>"
-                f"\n  <model>{params.model or 'env:IMAGE_MODEL'}</model>"
-                f"\n  <api_type>{params.api_type or 'env:IMAGE_API_TYPE'}</api_type>"
-                f"\n</debug_info>"
-            )
+            # 添加 debug_info（仅当 debug 开启时）
+            debug_enabled = _resolve_debug(arguments, config)
+            if debug_enabled:
+                response += (
+                    f"\n<debug_info>"
+                    f"\n  <image_count>{len(result.artifacts) if result.artifacts else 0}</image_count>"
+                    f"\n  <duration_sec>{result.duration_sec:.3f}</duration_sec>"
+                    f"\n  <model>{params.model or 'env:IMAGE_MODEL'}</model>"
+                    f"\n  <api_type>{params.api_type or 'env:IMAGE_API_TYPE'}</api_type>"
+                    f"\n</debug_info>"
+                )
 
             # 推送结果到 GUI
+            gui_metadata: dict[str, Any] = {
+                "artifacts": result.artifacts,
+                "task_note": task_note,
+            }
+            if debug_enabled:
+                gui_metadata["debug"] = {
+                    "image_count": len(result.artifacts) if result.artifacts else 0,
+                    "duration_sec": result.duration_sec,
+                    "model": params.model or "env:IMAGE_MODEL",
+                    "api_type": params.api_type or "env:IMAGE_API_TYPE",
+                }
             push_to_gui({
                 "category": "operation",
                 "operation_type": "tool_call",
@@ -1174,16 +1207,7 @@ async def _handle_image_tool(
                 "name": "image",
                 "status": "success",
                 "output": response,
-                "metadata": {
-                    "artifacts": result.artifacts,
-                    "task_note": task_note,
-                    "debug": {
-                        "image_count": len(result.artifacts) if result.artifacts else 0,
-                        "duration_sec": result.duration_sec,
-                        "model": params.model or "env:IMAGE_MODEL",
-                        "api_type": params.api_type or "env:IMAGE_API_TYPE",
-                    },
-                },
+                "metadata": gui_metadata,
             })
 
             return [TextContent(type="text", text=response)]
@@ -1285,6 +1309,7 @@ async def _handle_parallel_call(
     push_user_prompt: Any,
     push_to_gui: Any,
     gui_manager: Any,
+    config: Any,
 ) -> list[TextContent]:
     """处理 parallel 模式的工具调用。
 
@@ -1295,6 +1320,7 @@ async def _handle_parallel_call(
         push_user_prompt: 推送用户 prompt 的函数
         push_to_gui: 推送事件到 GUI 的函数
         gui_manager: GUI 管理器
+        config: 配置对象
 
     Returns:
         TextContent 列表
@@ -1521,7 +1547,7 @@ async def _handle_parallel_call(
     })
 
     # 构建 debug_info（如果 debug 开启）
-    debug_enabled = arguments.get("debug", False)
+    debug_enabled = _resolve_debug(arguments, config)
     debug_info = None
     if debug_enabled:
         debug_info = FormatterDebugInfo(

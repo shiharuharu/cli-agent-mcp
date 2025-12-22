@@ -32,13 +32,12 @@ def generate_html(
     # 侧边栏分组标题（多端模式下显示来源分组）
     sidebar_groups_js = ""
     if multi_source_mode:
+        # 从 Python SOURCE_COLORS 动态生成 JS 对象，保持一致性
+        colors_js = ", ".join(
+            f"{k}: '{v}'" for k, v in SOURCE_COLORS.items()
+        )
         sidebar_groups_js = f"""
-        const SOURCE_COLORS = {{
-            gemini: '{SOURCE_COLORS["gemini"]}',
-            codex: '{SOURCE_COLORS["codex"]}',
-            claude: '{SOURCE_COLORS["claude"]}',
-            unknown: '{SOURCE_COLORS["unknown"]}'
-        }};
+        const SOURCE_COLORS = {{ {colors_js} }};
         """
 
     return f'''<!DOCTYPE html>

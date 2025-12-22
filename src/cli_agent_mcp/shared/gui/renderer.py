@@ -98,16 +98,29 @@ class EventRenderer:
         else:
             return self._render_unknown(event, prefix)
 
-    def _format_timestamp(self, ts: str | None) -> str:
-        """格式化时间戳为 YYYY-MM-DD HH:MM:SS。"""
-        if not ts:
+    def _format_timestamp(self, ts: float | int | str | None) -> str:
+        """格式化时间戳为 YYYY-MM-DD HH:MM:SS。
+
+        支持:
+        - float/int: Unix 时间戳（秒），自动兼容毫秒（> 1e10）
+        - str: ISO 格式字符串
+        - None: 使用当前时间
+        """
+        if ts is None:
             return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         try:
+            if isinstance(ts, (int, float)):
+                # 兼容毫秒级时间戳
+                if ts > 1e10:
+                    ts = ts / 1000
+                dt = datetime.fromtimestamp(ts)
+                return dt.strftime("%Y-%m-%d %H:%M:%S")
+            # str 类型
             if "T" in ts:
                 dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
                 return dt.strftime("%Y-%m-%d %H:%M:%S")
             return ts[:19] if len(ts) >= 19 else ts
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, OSError):
             return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     def _extract_session_id(self, event: dict[str, Any]) -> str:

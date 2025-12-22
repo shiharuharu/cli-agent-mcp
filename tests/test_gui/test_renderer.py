@@ -340,6 +340,69 @@ class TestSessionExtraction:
         assert "#abc12345" in html
 
 
+class TestTimestampFormatting:
+    """测试时间戳格式化。"""
+
+    def test_float_timestamp(self):
+        """测试 float 类型时间戳（Unix 秒）。"""
+        renderer = EventRenderer()
+        # 2025-01-15 12:30:45 UTC
+        event = {
+            "category": "message",
+            "content_type": "text",
+            "role": "user",
+            "text": "Hello",
+            "source": "gemini",
+            "timestamp": 1736942445.0,  # float Unix timestamp
+        }
+        html = renderer.render(event)
+        # 应该正确格式化时间戳
+        assert "2025-01-15" in html
+
+    def test_int_timestamp(self):
+        """测试 int 类型时间戳（Unix 秒）。"""
+        renderer = EventRenderer()
+        event = {
+            "category": "message",
+            "content_type": "text",
+            "role": "user",
+            "text": "Hello",
+            "source": "gemini",
+            "timestamp": 1736942445,  # int Unix timestamp
+        }
+        html = renderer.render(event)
+        assert "2025-01-15" in html
+
+    def test_millisecond_timestamp(self):
+        """测试毫秒级时间戳自动转换。"""
+        renderer = EventRenderer()
+        event = {
+            "category": "message",
+            "content_type": "text",
+            "role": "user",
+            "text": "Hello",
+            "source": "gemini",
+            "timestamp": 1736942445000,  # milliseconds
+        }
+        html = renderer.render(event)
+        assert "2025-01-15" in html
+
+    def test_iso_string_timestamp(self):
+        """测试 ISO 字符串时间戳。"""
+        renderer = EventRenderer()
+        event = {
+            "category": "message",
+            "content_type": "text",
+            "role": "user",
+            "text": "Hello",
+            "source": "gemini",
+            "timestamp": "2025-01-15T12:30:45Z",
+        }
+        html = renderer.render(event)
+        assert "2025-01-15" in html
+        assert "12:30:45" in html
+
+
 class TestSeverityRendering:
     """测试不同 severity 级别的渲染颜色。"""
 
