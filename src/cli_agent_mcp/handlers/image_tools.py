@@ -13,23 +13,11 @@ from mcp.types import TextContent
 
 from .base import ToolContext, ToolHandler
 from ..shared.invokers import BananaInvoker, BananaParams, ImageInvoker, ImageParams
-from ..shared.response_formatter import ResponseData, get_formatter
+from ..shared.response_formatter import ResponseData, get_formatter, format_error_response
 
 __all__ = ["BananaHandler", "ImageHandler"]
 
 logger = logging.getLogger(__name__)
-
-
-def _format_error_response(error: str) -> list[TextContent]:
-    """统一的错误响应格式化。"""
-    formatter = get_formatter()
-    response_data = ResponseData(
-        answer="",
-        session_id="",
-        success=False,
-        error=error,
-    )
-    return [TextContent(type="text", text=formatter.format(response_data))]
 
 
 class BananaHandler(ToolHandler):
@@ -174,14 +162,14 @@ Supports: reference images with roles (edit_base, style_ref, etc.)."""
 
                 return [TextContent(type="text", text=response)]
             else:
-                return _format_error_response(result.error or "Unknown error")
+                return format_error_response(result.error or "Unknown error")
 
         except asyncio.CancelledError:
             raise
 
         except Exception as e:
             logger.exception(f"Banana tool error: {e}")
-            return _format_error_response(str(e))
+            return format_error_response(str(e))
 
 
 class ImageHandler(ToolHandler):
@@ -315,11 +303,11 @@ Supports: reference images for editing."""
 
                 return [TextContent(type="text", text=response)]
             else:
-                return _format_error_response(result.error or "Unknown error")
+                return format_error_response(result.error or "Unknown error")
 
         except asyncio.CancelledError:
             raise
 
         except Exception as e:
             logger.exception(f"Image tool error: {e}")
-            return _format_error_response(str(e))
+            return format_error_response(str(e))

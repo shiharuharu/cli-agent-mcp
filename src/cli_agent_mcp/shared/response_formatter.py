@@ -11,7 +11,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from mcp.types import TextContent
 
 
 @dataclass
@@ -262,3 +265,21 @@ def get_formatter() -> ResponseFormatter:
     if _formatter is None:
         _formatter = ResponseFormatter()
     return _formatter
+
+
+def format_error_response(error: str) -> list[TextContent]:
+    """统一的错误响应格式化函数。
+
+    确保所有错误都以 <response><error>...</error></response> 格式返回，
+    保持 API 契约一致性。
+    """
+    from mcp.types import TextContent
+
+    formatter = get_formatter()
+    response_data = ResponseData(
+        answer="",
+        session_id="",
+        success=False,
+        error=error,
+    )
+    return [TextContent(type="text", text=formatter.format(response_data))]

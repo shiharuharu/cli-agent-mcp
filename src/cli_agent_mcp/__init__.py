@@ -11,6 +11,7 @@
 
 __version__ = "0.1.4"
 
-from .server import main
+from .app import main
+from .server import create_server
 
-__all__ = ["__version__", "main"]
+__all__ = ["__version__", "main", "create_server"]

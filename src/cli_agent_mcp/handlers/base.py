@@ -34,7 +34,7 @@ class ToolContext:
     registry: "RequestRegistry | None"
     push_to_gui: Callable[[dict[str, Any]], None]
     push_user_prompt: Callable[[str, str, str], None]
-    make_event_callback: Callable[[str, str], Callable[[Any], None]]
+    make_event_callback: Callable[[str, str, int | None], Callable[[Any], None] | None]
 
     def resolve_debug(self, arguments: dict[str, Any]) -> bool:
         """统一解析 debug 开关。"""

@@ -98,6 +98,9 @@ class ClaudeInvoker(CLIInvoker):
         # 硬编码：非交互模式
         cmd.append("-p")
 
+        # 跳过权限确认（MCP 服务器场景下必需）
+        cmd.append("--dangerously-skip-permissions")
+
         # 硬编码：流式 JSON 输出（需要 --verbose）
         cmd.extend(["--output-format", "stream-json"])
         cmd.append("--verbose")  # stream-json 在 -p 模式下需要 --verbose

@@ -5,10 +5,15 @@
 
 from .base import ToolContext, ToolHandler
 from .image_tools import BananaHandler, ImageHandler
+from .cli import CLIHandler, build_params
+from .parallel import ParallelHandler
 
 __all__ = [
     "ToolContext",
     "ToolHandler",
     "BananaHandler",
     "ImageHandler",
+    "CLIHandler",
+    "ParallelHandler",
+    "build_params",
 ]

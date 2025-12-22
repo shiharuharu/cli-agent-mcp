@@ -170,12 +170,24 @@ body {{
     cursor: pointer;
     display: flex;
     justify-content: space-between;
+    align-items: flex-start;
     font-size: 11px;
     color: {COLORS["fg_muted"]};
+    gap: 4px;
 }}
 .sidebar-item:hover {{ background: {COLORS["hover"]}; }}
 .sidebar-item.active {{ background: {COLORS["selection"]}; color: {COLORS["fg"]}; }}
-.sidebar-item .count {{ color: {COLORS["fg_dim"]}; }}
+.sidebar-item > div:first-child {{
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}}
+.sidebar-item .count {{
+    color: {COLORS["fg_dim"]};
+    flex-shrink: 0;
+    min-width: 20px;
+    text-align: right;
+}}
 .sidebar-group {{
     padding: 4px 8px;
     font-size: 10px;
@@ -301,15 +313,18 @@ function addEvent(html, sessionId, source, taskNote) {{
     // Update session list
     if (sessionId) {{
         if (!sessions[sessionId]) {{
-            sessions[sessionId] = {{ source: source || 'unknown', count: 0, taskNote: taskNote || '' }};
+            sessions[sessionId] = {{ source: source || 'unknown', count: 1, taskNote: taskNote || '' }};
             updateSessionList();
-        }} else if (taskNote && !sessions[sessionId].taskNote) {{
-            // 更新 taskNote（如果之前没有）
-            sessions[sessionId].taskNote = taskNote;
-            updateSessionList();
+        }} else {{
+            sessions[sessionId].count++;
+            if (taskNote && !sessions[sessionId].taskNote) {{
+                // 更新 taskNote（如果之前没有）
+                sessions[sessionId].taskNote = taskNote;
+                updateSessionList();
+            }} else {{
+                updateSessionCount(sessionId);
+            }}
         }}
-        sessions[sessionId].count++;
-        updateSessionCount(sessionId);
     }}
 
     // Update current task display
