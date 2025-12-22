@@ -163,6 +163,7 @@ body {{
 #sidebar-content {{
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 4px 0;
 }}
 .sidebar-item {{
@@ -181,6 +182,12 @@ body {{
     flex: 1;
     min-width: 0;
     overflow: hidden;
+}}
+.sidebar-item > div:first-child > span {{
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }}
 .sidebar-item .count {{
     color: {COLORS["fg_dim"]};
