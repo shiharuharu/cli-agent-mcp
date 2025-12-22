@@ -50,6 +50,8 @@ class CLIType(str, Enum):
     GEMINI = "gemini"
     CLAUDE = "claude"
     OPENCODE = "opencode"
+    BANANA = "banana"
+    IMAGE = "image"
 
 
 # Permission 到 Codex sandbox 参数的映射
@@ -198,9 +200,9 @@ class DebugInfo:
         duration_sec: 执行时长（秒，带小数）
         message_count: 消息数量
         tool_call_count: 工具调用次数
-        input_tokens: 输入 token 数（如果可用）
-        output_tokens: 输出 token 数（如果可用）
-        cached_input_tokens: 缓存输入 token 数（如果可用）
+        input_tokens: 输入 token 数（None 表示未知）
+        output_tokens: 输出 token 数（None 表示未知）
+        cached_input_tokens: 缓存输入 token 数（None 表示未知）
         exit_code: CLI 退出码（仅当非零时有意义）
         cancelled: 是否被取消
     """
@@ -209,9 +211,9 @@ class DebugInfo:
     duration_sec: float = 0.0
     message_count: int = 0
     tool_call_count: int = 0
-    input_tokens: int = 0
-    output_tokens: int = 0
-    cached_input_tokens: int = 0
+    input_tokens: int | None = None  # None 表示未知，0 表示确实为 0
+    output_tokens: int | None = None
+    cached_input_tokens: int | None = None
     exit_code: int | None = None
     cancelled: bool = False
 
@@ -222,10 +224,14 @@ class DebugInfo:
             "duration_sec": round(self.duration_sec, 3),
             "message_count": self.message_count,
             "tool_call_count": self.tool_call_count,
-            "input_tokens": self.input_tokens,
-            "output_tokens": self.output_tokens,
-            "cached_input_tokens": self.cached_input_tokens,
         }
+        # 仅当有值时才包含 token 统计（None 表示未知）
+        if self.input_tokens is not None:
+            result["input_tokens"] = self.input_tokens
+        if self.output_tokens is not None:
+            result["output_tokens"] = self.output_tokens
+        if self.cached_input_tokens is not None:
+            result["cached_input_tokens"] = self.cached_input_tokens
         if self.exit_code is not None:
             result["exit_code"] = self.exit_code
         if self.cancelled:

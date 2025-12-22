@@ -25,7 +25,7 @@ import sys
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 from .renderer import EventRenderer, RenderConfig
 from .server import GUIServer, ServerConfig
@@ -99,9 +99,10 @@ class LiveViewer:
         if multi_source_mode is not None:
             self.config.multi_source_mode = multi_source_mode
 
-        # 渲染器
+        # 渲染器（file_url_resolver 在 server 启动后设置）
         self._renderer = EventRenderer(
-            RenderConfig(multi_source_mode=self.config.multi_source_mode)
+            RenderConfig(multi_source_mode=self.config.multi_source_mode),
+            file_url_resolver=None,
         )
 
         # 事件队列
@@ -118,6 +119,7 @@ class LiveViewer:
         # HTTP 服务器
         self._server: GUIServer | None = None
         self._url: str | None = None
+        self._url_callback: Callable[[str], None] | None = None  # URL 回调
         self._webview_available: bool = False
 
         # 统计
@@ -177,6 +179,16 @@ class LiveViewer:
         self._server.start()
         self._url = self._server.url
 
+        # 设置 file_url_resolver
+        self._renderer._file_url_resolver = self._server.register_file
+
+        # HTTP server 启动后立即回调 URL
+        if self._url_callback:
+            try:
+                self._url_callback(self._url)
+            except Exception:
+                pass
+
         # 注册断开回调
         self._server.on_all_disconnected(self._on_all_clients_disconnected)
 
@@ -233,6 +245,11 @@ class LiveViewer:
         """启动纯 Web 模式"""
         self._webview_available = False
         self._started.set()
+
+        # 自动打开浏览器
+        import webbrowser
+        if self._url:
+            webbrowser.open(self._url)
 
         self._poll_thread = threading.Thread(
             target=self._poll_queue_loop, daemon=True
@@ -336,6 +353,23 @@ class LiveViewer:
 
             if stats.get("tool_calls"):
                 self._stats["tools"] = stats["tool_calls"]
+                updated = True
+
+        # Debug info from metadata (banana, image, parallel)
+        metadata = event.get("metadata", {})
+        debug = metadata.get("debug", {})
+        if debug:
+            if debug.get("model"):
+                self._stats["model"] = debug["model"]
+                updated = True
+            if debug.get("duration_sec"):
+                self._stats["duration"] = debug["duration_sec"]
+                updated = True
+            if debug.get("image_count"):
+                self._stats["tools"] = debug["image_count"]
+                updated = True
+            if debug.get("total_tasks"):
+                self._stats["tools"] = debug["total_tasks"]
                 updated = True
 
         # Tool count from operations

@@ -1,10 +1,14 @@
 """CAM 环境变量配置管理。
 
 环境变量:
-    CAM_TOOLS: 允许的 CLI 工具列表
-        - 空/未设置 = 全部可用 (codex, gemini, claude)
+    CAM_ENABLE: 启用的工具列表
+        - 空/未设置 = 全部可用 (codex, gemini, claude, opencode, banana, image)
         - 逗号分割，忽略大小写
         - 例: "codex,gemini" 或 "CODEX, Gemini"
+
+    CAM_DISABLE: 禁用的工具列表（从 enable 中减去）
+        - 逗号分割，忽略大小写
+        - 例: "banana,image" 禁用图片生成工具
 
     CAM_GUI: 是否启动 GUI 窗口
         - true/1/yes = 启动 (默认)
@@ -78,7 +82,7 @@ class SigintMode(Enum):
         return cls.CANCEL  # 默认值
 
 # 支持的 CLI 类型
-SUPPORTED_TOOLS = frozenset({"codex", "gemini", "claude", "opencode"})
+SUPPORTED_TOOLS = frozenset({"codex", "gemini", "claude", "opencode", "banana", "image"})
 
 
 def _parse_bool(value: str | None, default: bool = False) -> bool:
@@ -88,17 +92,17 @@ def _parse_bool(value: str | None, default: bool = False) -> bool:
     return value.lower() in ("true", "1", "yes", "on")
 
 
-def _parse_tools(value: str | None) -> set[str]:
+def _parse_tool_list(value: str | None) -> set[str]:
     """解析工具列表环境变量。
 
     Args:
         value: 环境变量值，逗号分割，忽略大小写
 
     Returns:
-        允许的工具集合，空集合表示全部可用
+        工具集合
     """
     if not value or not value.strip():
-        return set()  # 空 = 全部可用
+        return set()
 
     tools = set()
     for item in value.split(","):
@@ -107,6 +111,27 @@ def _parse_tools(value: str | None) -> set[str]:
             tools.add(tool)
 
     return tools
+
+
+def _compute_enabled_tools(enable: str | None, disable: str | None) -> set[str]:
+    """计算最终启用的工具列表。
+
+    Args:
+        enable: CAM_ENABLE 环境变量值
+        disable: CAM_DISABLE 环境变量值
+
+    Returns:
+        最终启用的工具集合，空集合表示全部可用
+    """
+    enabled = _parse_tool_list(enable)
+    disabled = _parse_tool_list(disable)
+
+    # enable 为空时默认全开
+    if not enabled:
+        enabled = set(SUPPORTED_TOOLS)
+
+    # 从 enable 中减去 disable
+    return enabled - disabled
 
 
 @dataclass
@@ -138,13 +163,11 @@ class Config:
     @property
     def allowed_tools(self) -> set[str]:
         """获取实际允许的工具列表。"""
-        if not self.tools:
-            return set(SUPPORTED_TOOLS)
         return self.tools
 
     def is_tool_allowed(self, tool: str) -> bool:
         """检查工具是否允许使用。"""
-        return tool.lower() in self.allowed_tools
+        return tool.lower() in self.tools
 
     def __repr__(self) -> str:
         tools_str = ",".join(sorted(self.allowed_tools)) or "all"
@@ -202,7 +225,10 @@ def load_config() -> Config:
     log_file = _generate_log_file_path() if log_debug else None
 
     return Config(
-        tools=_parse_tools(os.environ.get("CAM_TOOLS")),
+        tools=_compute_enabled_tools(
+            os.environ.get("CAM_ENABLE"),
+            os.environ.get("CAM_DISABLE"),
+        ),
         gui_enabled=_parse_bool(os.environ.get("CAM_GUI"), default=True),
         gui_detail=_parse_bool(os.environ.get("CAM_GUI_DETAIL"), default=False),
         gui_keep=_parse_bool(os.environ.get("CAM_KEEP_UI"), default=False),

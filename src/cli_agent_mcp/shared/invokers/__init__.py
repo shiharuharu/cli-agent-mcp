@@ -42,9 +42,10 @@ __version__ = "0.1.0"
 from .base import CLIInvoker, EventCallback, ExecutionContext
 from .claude import ClaudeInvoker
 from .codex import CodexInvoker
-from .collector import CollectedResult, ErrorCategory, ResultCollector
 from .gemini import GeminiInvoker
 from .opencode import OpencodeInvoker
+from .banana import BananaInvoker, BananaParams, BananaExecutionResult
+from .image import ImageInvoker, ImageParams, ImageExecutionResult
 from .types import (
     CLIType,
     ClaudeParams,
@@ -71,7 +72,11 @@ __all__ = [
     "GeminiParams",
     "ClaudeParams",
     "OpencodeParams",
+    "BananaParams",
+    "ImageParams",
     "ExecutionResult",
+    "BananaExecutionResult",
+    "ImageExecutionResult",
     "GUIMetadata",
     "DebugInfo",
     # 映射表
@@ -81,15 +86,13 @@ __all__ = [
     "CLIInvoker",
     "EventCallback",
     "ExecutionContext",
-    # 结果收集器
-    "ResultCollector",
-    "CollectedResult",
-    "ErrorCategory",
     # 调用器
     "CodexInvoker",
     "GeminiInvoker",
     "ClaudeInvoker",
     "OpencodeInvoker",
+    "BananaInvoker",
+    "ImageInvoker",
     # 工厂函数
     "create_invoker",
 ]
@@ -98,7 +101,7 @@ __all__ = [
 def create_invoker(
     cli_type: CLIType | str,
     event_callback: EventCallback | None = None,
-) -> CLIInvoker:
+) -> CLIInvoker | BananaInvoker | ImageInvoker:
     """创建指定 CLI 的调用器实例。
 
     Args:
@@ -122,5 +125,9 @@ def create_invoker(
         return ClaudeInvoker(event_callback=event_callback)
     elif cli_type == CLIType.OPENCODE:
         return OpencodeInvoker(event_callback=event_callback)
+    elif cli_type == CLIType.BANANA:
+        return BananaInvoker(event_callback=event_callback)
+    elif cli_type == CLIType.IMAGE:
+        return ImageInvoker(event_callback=event_callback)
     else:
         raise ValueError(f"Unsupported CLI type: {cli_type}")

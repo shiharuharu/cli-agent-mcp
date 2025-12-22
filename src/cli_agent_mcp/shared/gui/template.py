@@ -224,6 +224,11 @@ body {{
 }}
 .fold-content.show {{ display: block; }}
 
+/* Image grid */
+.img-grid {{ display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }}
+.img-thumb {{ max-width: 200px; max-height: 150px; border-radius: 4px; cursor: pointer; border: 1px solid {COLORS["border"]}; }}
+.img-thumb:hover {{ border-color: #666; transform: scale(1.02); }}
+
 /* Highlight */
 .hl {{ background: #3A3A00; }}
 

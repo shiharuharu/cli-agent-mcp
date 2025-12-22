@@ -2,7 +2,7 @@
 
 [中文文档](README_zh.md)
 
-Unified MCP (Model Context Protocol) server for CLI AI agents. Provides a single interface to invoke Codex, Gemini, Claude, and OpenCode CLI tools.
+Unified MCP (Model Context Protocol) server for CLI AI agents. Provides a single interface to invoke Codex, Gemini, Claude, OpenCode CLI tools, and Nano Banana Pro image generation.
 
 ## Why cli-agent-mcp?
 
@@ -14,6 +14,7 @@ This is more than a CLI wrapper — it's an **orchestration pattern** for multi-
 - **Codex**: The critic. Its analytical eye catches what you missed, challenges assumptions, finds edge cases.
 - **Gemini**: The creative. Divergent thinking, unexpected connections, the spark you didn't know you needed.
 - **Claude**: The scribe. Faithful execution, clear documentation, turning ideas into working code.
+- **Banana**: The artist. High-fidelity image generation for UI mockups, product visuals, and creative assets.
 
 **Want persistent results?** Use `save_file` to capture agent outputs, then let Claude synthesize insights across multiple analyses.
 
@@ -53,7 +54,8 @@ Configure via environment variables:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `CAM_TOOLS` | Comma-separated list of allowed tools (empty = all) | `""` (all) |
+| `CAM_ENABLE` | Comma-separated list of enabled tools (empty = all) | `""` (all) |
+| `CAM_DISABLE` | Comma-separated list of disabled tools (subtracted from enable) | `""` |
 | `CAM_GUI` | Enable GUI dashboard | `true` |
 | `CAM_GUI_DETAIL` | GUI detail mode | `false` |
 | `CAM_GUI_KEEP` | Keep GUI on exit | `false` |
@@ -77,7 +79,7 @@ Invoke OpenAI Codex CLI agent for deep code analysis and critical review.
 | `continuation_id` | string | | `""` | Pass from previous response to continue conversation |
 | `permission` | string | | `read-only` | Permission level: `read-only`, `workspace-write`, `unlimited` |
 | `model` | string | | `""` | Model override (only specify if explicitly requested) |
-| `save_file` | string | | `""` | Save agent output to file path |
+| `save_file` | string | | `""` | PREFERRED for large outputs. Writes directly to file, avoiding context overflow |
 | `report_mode` | boolean | | `false` | Generate standalone report format |
 | `save_file_with_wrapper` | boolean | | `false` | Wrap output with `<agent-output>` XML tags |
 | `save_file_with_append_mode` | boolean | | `false` | Append to file instead of overwriting |
@@ -100,7 +102,7 @@ Invoke Google Gemini CLI agent for UI design and comprehensive analysis.
 | `continuation_id` | string | | `""` | Pass from previous response to continue conversation |
 | `permission` | string | | `read-only` | Permission level: `read-only`, `workspace-write`, `unlimited` |
 | `model` | string | | `""` | Model override |
-| `save_file` | string | | `""` | Save agent output to file path |
+| `save_file` | string | | `""` | PREFERRED for large outputs. Writes directly to file, avoiding context overflow |
 | `report_mode` | boolean | | `false` | Generate standalone report format |
 | `save_file_with_wrapper` | boolean | | `false` | Wrap output with `<agent-output>` XML tags |
 | `save_file_with_append_mode` | boolean | | `false` | Append to file instead of overwriting |
@@ -122,7 +124,7 @@ Invoke Anthropic Claude CLI agent for code implementation.
 | `continuation_id` | string | | `""` | Pass from previous response to continue conversation |
 | `permission` | string | | `read-only` | Permission level: `read-only`, `workspace-write`, `unlimited` |
 | `model` | string | | `""` | Model override (`sonnet`, `opus`, or full model name) |
-| `save_file` | string | | `""` | Save agent output to file path |
+| `save_file` | string | | `""` | PREFERRED for large outputs. Writes directly to file, avoiding context overflow |
 | `report_mode` | boolean | | `false` | Generate standalone report format |
 | `save_file_with_wrapper` | boolean | | `false` | Wrap output with `<agent-output>` XML tags |
 | `save_file_with_append_mode` | boolean | | `false` | Append to file instead of overwriting |
@@ -147,7 +149,7 @@ Invoke OpenCode CLI agent for full-stack development.
 | `continuation_id` | string | | `""` | Pass from previous response to continue conversation |
 | `permission` | string | | `read-only` | Permission level: `read-only`, `workspace-write`, `unlimited` |
 | `model` | string | | `""` | Model override (format: `provider/model`) |
-| `save_file` | string | | `""` | Save agent output to file path |
+| `save_file` | string | | `""` | PREFERRED for large outputs. Writes directly to file, avoiding context overflow |
 | `report_mode` | boolean | | `false` | Generate standalone report format |
 | `save_file_with_wrapper` | boolean | | `false` | Wrap output with `<agent-output>` XML tags |
 | `save_file_with_append_mode` | boolean | | `false` | Append to file instead of overwriting |
@@ -157,6 +159,63 @@ Invoke OpenCode CLI agent for full-stack development.
 | `agent` | string | | `build` | Agent type: `build`, `plan`, etc. |
 | `task_note` | string | | `""` | Display label for GUI |
 | `debug` | boolean | | (global) | Override debug setting for this call |
+
+### banana
+
+Generate high-fidelity images via the Nano Banana Pro API.
+
+**Best for**: UI mockups, product visuals, infographics, architectural renders, character art
+
+Nano Banana Pro has exceptional understanding and visual expression capabilities—your prompt creativity is the only limit, not the model.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `prompt` | string | ✓ | - | Image generation prompt |
+| `save_path` | string | ✓ | - | Base directory for saving images |
+| `task_note` | string | ✓ | - | Subdirectory name (English recommended, e.g., 'hero-banner'). Files saved to `{save_path}/{task_note}/` |
+| `images` | array | | `[]` | Reference images (absolute paths) with optional role and label |
+| `aspect_ratio` | string | | `"1:1"` | Image aspect ratio: `1:1`, `2:3`, `3:2`, `3:4`, `4:3`, `4:5`, `5:4`, `9:16`, `16:9`, `21:9` |
+| `resolution` | string | | `"1K"` | Image resolution: `1K`, `2K`, `4K` |
+| `include_thoughts` | boolean | | `false` | Include thinking process in response |
+
+**Environment Variables:**
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `BANANA_AUTH_TOKEN` | ✓ | - | Google API key or Bearer token |
+| `BANANA_ENDPOINT` | | `https://generativelanguage.googleapis.com` | API endpoint (version path auto-appended) |
+
+**Prompt Best Practices:**
+- Explicitly request an image (e.g., start with "Generate an image:" or include `"output":"image"`)
+- Use structured specs (JSON / XML tags / labeled sections) for complex requests
+- Use `MUST/STRICT/CRITICAL` for non-negotiable constraints
+- Add negative constraints (e.g., "no watermark", "no distorted hands")
+
+### image
+
+Generate images via OpenRouter-compatible or OpenAI-compatible endpoints.
+
+**Best for**: General image generation when you need compatibility with various providers. For best results with Gemini models, use the `banana` tool instead.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `prompt` | string | ✓ | - | Image generation prompt |
+| `save_path` | string | ✓ | - | Base directory for saving images |
+| `task_note` | string | ✓ | - | Subdirectory name (English recommended, e.g., 'hero-banner'). Files saved to `{save_path}/{task_note}/` |
+| `images` | array | | `[]` | Reference images (absolute paths) with optional role and label |
+| `aspect_ratio` | string | | `"1:1"` | Image aspect ratio: `1:1`, `2:3`, `3:2`, `3:4`, `4:3`, `4:5`, `5:4`, `9:16`, `16:9`, `21:9` |
+| `resolution` | string | | `"1K"` | Image resolution: `1K`, `2K`, `4K` |
+| `model` | string | | (env) | Model to use for generation |
+| `api_type` | string | | (env) | API type: `openrouter_chat`, `openai_images`, `openai_responses` |
+
+**Environment Variables:**
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `IMAGE_AUTH_TOKEN` | ✓ | - | API key for image generation |
+| `IMAGE_ENDPOINT` | | `https://openrouter.ai/api` | API endpoint (version path auto-appended) |
+| `IMAGE_MODEL` | | `gpt-image-1` | Default model |
+| `IMAGE_API_TYPE` | | `openrouter_chat` | API type: `openrouter_chat`, `openai_images`, `openai_responses` |
 
 ### get_gui_url
 
@@ -286,11 +345,11 @@ Error responses include partial progress to enable retry:
 
 ## Permission Levels
 
-| Level | Description | Codex | Gemini | Claude | OpenCode |
-|-------|-------------|-------|--------|--------|----------|
-| `read-only` | Can only read files | `--sandbox read-only` | Read-only tools only | `--tools Read,Grep,Glob` | `edit: deny, bash: deny` |
-| `workspace-write` | Can modify files within workspace | `--sandbox workspace-write` | All tools + sandbox | `--tools Read,Edit,Write,Bash` | `edit: allow, bash: ask` |
-| `unlimited` | Full system access (use with caution) | `--sandbox danger-full-access` | All tools, no sandbox | `--tools default` | `edit: allow, bash: allow` |
+| Level | Description | Codex | Gemini | Claude | OpenCode | Banana |
+|-------|-------------|-------|--------|--------|----------|--------|
+| `read-only` | Can only read files | `--sandbox read-only` | Read-only tools only | `--tools Read,Grep,Glob` | `edit: deny, bash: deny` | Read workspace images only |
+| `workspace-write` | Can modify files within workspace | `--sandbox workspace-write` | All tools + sandbox | `--tools Read,Edit,Write,Bash` | `edit: allow, bash: ask` | Write to workspace only |
+| `unlimited` | Full system access (use with caution) | `--sandbox danger-full-access` | All tools, no sandbox | `--tools default` | `edit: allow, bash: allow` | Full access |
 
 ## Debug Mode
 
@@ -395,7 +454,23 @@ Add to your MCP client configuration (e.g., Claude Desktop `claude_desktop_confi
       "command": "uvx",
       "args": ["cli-agent-mcp"],
       "env": {
-        "CAM_TOOLS": "claude,gemini"
+        "CAM_ENABLE": "claude,gemini"
+      }
+    }
+  }
+}
+```
+
+### Disable Image Tools
+
+```json
+{
+  "mcpServers": {
+    "cli-agent-mcp": {
+      "command": "uvx",
+      "args": ["cli-agent-mcp"],
+      "env": {
+        "CAM_DISABLE": "banana,image"
       }
     }
   }
@@ -406,20 +481,13 @@ Add to your MCP client configuration (e.g., Claude Desktop `claude_desktop_confi
 
 ```
 cli-agent-mcp/
-├── shared/                  # Source of truth (for distribution)
-│   ├── gui/
-│   ├── invokers/
-│   └── parsers/
 ├── src/cli_agent_mcp/       # Main package
-│   ├── shared/              # ← Synced copy (do not edit directly)
+│   ├── shared/              # Shared modules (image, invokers, parsers, gui)
 │   ├── server.py
 │   ├── config.py
 │   └── gui_manager.py
-├── tests/
-└── shared_sync.sh
+└── tests/
 ```
-
-**Important**: Never edit `src/cli_agent_mcp/shared/` directly. Always edit `shared/` and run the sync script.
 
 ## Development
 
@@ -429,9 +497,6 @@ pip install -e ".[dev]"
 
 # Run tests
 pytest
-
-# Sync shared modules (runs tests first)
-./shared_sync.sh
 ```
 
 ## License

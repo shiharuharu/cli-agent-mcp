@@ -2,17 +2,9 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import pytest
 
-# 添加 shared 到路径（在 conftest.py 也设置了，但这里确保独立运行也可以）
-SHARED_DIR = Path(__file__).parent.parent.parent / "shared"
-if SHARED_DIR.exists() and str(SHARED_DIR) not in sys.path:
-    sys.path.insert(0, str(SHARED_DIR))
-
-from gui.renderer import EventRenderer, RenderConfig
+from cli_agent_mcp.shared.gui.renderer import EventRenderer, RenderConfig
 
 
 class TestEventRenderer:

@@ -40,6 +40,25 @@ from .shared.response_formatter import (
     get_formatter,
 )
 
+# 支持的工具列表（用于校验）
+SUPPORTED_TOOLS = {"codex", "gemini", "claude", "opencode", "banana", "image"}
+
+
+def _format_error_response(error: str) -> list[TextContent]:
+    """统一的错误响应格式化函数。
+
+    确保所有错误都以 <response><error>...</error></response> 格式返回，
+    保持 API 契约一致性。
+    """
+    formatter = get_formatter()
+    response_data = ResponseData(
+        answer="",
+        session_id="",
+        success=False,
+        error=error,
+    )
+    return [TextContent(type="text", text=formatter.format(response_data))]
+
 from .shared.invokers import (
     CLIType,
     ClaudeInvoker,
@@ -50,6 +69,10 @@ from .shared.invokers import (
     GeminiParams,
     OpencodeInvoker,
     OpencodeParams,
+    BananaInvoker,
+    BananaParams,
+    ImageInvoker,
+    ImageParams,
     Permission,
     create_invoker,
 )
@@ -142,6 +165,47 @@ BEST PRACTICES:
 - Use file attachments for context-heavy tasks
 
 Supports: file attachments, multiple agents (build, plan, etc.).""",
+
+    "banana": """Generate images using Nano Banana Pro (Gemini 3 Pro Image).
+
+CAPABILITIES:
+- Text-to-image generation with high quality output
+- Image editing and transformation with reference images
+- Multiple aspect ratios and resolutions (1K/2K/4K)
+- Style transfer and multi-image fusion
+- Optional search grounding for factual content
+
+RESPONSE FORMAT:
+- Returns XML with file paths to generated images
+- Images are saved to disk (no base64 in response)
+- Includes text descriptions and optional thinking process
+
+BEST PRACTICES:
+- Be descriptive: describe scenes, not just keywords
+- Use negative constraints in prompt: "no text", "no watermark"
+- For editing: provide reference image and specify what to keep
+- For style transfer: provide style reference image
+
+Supports: reference images with roles (edit_base, style_ref, etc.).""",
+
+    "image": """Generate images via OpenRouter-compatible or OpenAI-compatible endpoints.
+
+CAPABILITIES:
+- Text-to-image generation with multiple providers
+- Image editing and transformation with reference images
+- Multiple aspect ratios and resolutions (1K/2K/4K)
+
+RESPONSE FORMAT:
+- Returns XML with file paths to generated images
+- Images saved to disk (no base64 in response)
+- Includes text descriptions when available
+
+BEST PRACTICES:
+- Be descriptive: describe scenes, lighting, style, composition
+- Use negative constraints in prompt: "no text", "no watermark", "no blur"
+- For editing: provide reference image and specify what to keep
+
+Supports: reference images for editing.""",
 }
 
 # 公共参数 schema（按重要性排序）
@@ -194,9 +258,10 @@ COMMON_PROPERTIES = {
     "save_file": {
         "type": "string",
         "description": (
-            "File path to save the FINAL textual answer (no debug info). "
-            "NOTE: This write IS PERMITTED even in 'read-only' mode (handled by server). "
-            "Use to persist reports/documentation."
+            "PREFERRED when agent needs to write files or produce lengthy output. "
+            "Output is written directly to this path, avoiding context overflow. "
+            "This write is permitted even in read-only mode (server-handled). "
+            "Essential for: code generation, detailed reports, documentation."
         ),
     },
     "save_file_with_wrapper": {
@@ -298,6 +363,141 @@ OPENCODE_PROPERTIES = {
     },
 }
 
+BANANA_PROPERTIES = {
+    "images": {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "source": {
+                    "type": "string",
+                    "description": "Absolute path to the image file",
+                },
+                "role": {
+                    "type": "string",
+                    "enum": ["edit_base", "subject_ref", "style_ref", "layout_ref", "background_ref", "object_ref"],
+                    "description": "Role of the reference image",
+                },
+                "label": {
+                    "type": "string",
+                    "description": "Optional label for the image",
+                },
+            },
+            "required": ["source"],
+        },
+        "default": [],
+        "description": (
+            "Reference images for editing or style transfer. "
+            "Roles: edit_base (image to edit), subject_ref (person/character), "
+            "style_ref (style reference), layout_ref (layout), background_ref, object_ref."
+        ),
+    },
+    "aspect_ratio": {
+        "type": "string",
+        "enum": ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"],
+        "default": "1:1",
+        "description": "Output image aspect ratio. Default: 1:1 (square).",
+    },
+    "resolution": {
+        "type": "string",
+        "enum": ["1K", "2K", "4K"],
+        "default": "4K",
+        "description": "Output resolution. 1K (1024px), 2K (2048px), 4K (4096px). Default: 4K.",
+    },
+    "use_search": {
+        "type": "boolean",
+        "default": False,
+        "description": "Enable search grounding for factual content. Adds text to response.",
+    },
+    "include_thoughts": {
+        "type": "boolean",
+        "default": False,
+        "description": "Include model's thinking process in response.",
+    },
+    "temperature": {
+        "type": "number",
+        "default": 1.0,
+        "minimum": 0.0,
+        "maximum": 2.0,
+        "description": "Controls randomness (0.0-2.0). Higher = more creative. Default: 1.0.",
+    },
+    "top_p": {
+        "type": "number",
+        "default": 0.95,
+        "minimum": 0.0,
+        "maximum": 1.0,
+        "description": "Nucleus sampling threshold (0.0-1.0). Default: 0.95.",
+    },
+    "top_k": {
+        "type": "integer",
+        "default": 40,
+        "minimum": 1,
+        "maximum": 100,
+        "description": "Top-k sampling (1-100). Default: 40.",
+    },
+    "num_images": {
+        "type": "integer",
+        "default": 1,
+        "minimum": 1,
+        "maximum": 4,
+        "description": "Number of images to generate (1-4). Default: 1.",
+    },
+    "save_path": {
+        "type": "string",
+        "description": "Base directory for saving images. Files saved to {save_path}/{task_note}/.",
+    },
+}
+
+IMAGE_PROPERTIES = {
+    "images": {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "source": {
+                    "type": "string",
+                    "description": "Absolute path to the image file",
+                },
+            },
+            "required": ["source"],
+        },
+        "default": [],
+        "description": "Reference images for editing or style transfer.",
+    },
+    "model": {
+        "type": "string",
+        "default": "",
+        "description": "Model to use (default: from IMAGE_MODEL env).",
+    },
+    "aspect_ratio": {
+        "type": "string",
+        "enum": ["1:1", "16:9", "9:16", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "21:9"],
+        "default": "1:1",
+        "description": "Output image aspect ratio. Default: 1:1 (square).",
+    },
+    "resolution": {
+        "type": "string",
+        "enum": ["1K", "2K", "4K"],
+        "default": "1K",
+        "description": "Output resolution. 1K (1024px), 2K (2048px), 4K (4096px). Default: 1K.",
+    },
+    "quality": {
+        "type": "string",
+        "default": "standard",
+        "description": "Image quality (OpenAI generations API). Options: standard, hd.",
+    },
+    "save_path": {
+        "type": "string",
+        "description": "Base directory for saving images. Files saved to {save_path}/{task_note}/.",
+    },
+    "api_type": {
+        "type": "string",
+        "enum": ["openrouter_chat", "openai_images", "openai_responses"],
+        "default": "openrouter_chat",
+        "description": "API type to use. Default: from IMAGE_API_TYPE env var (openrouter_chat).",
+    },
+}
+
 # 末尾参数（所有工具共用）
 TAIL_PROPERTIES = {
     "task_note": {
@@ -315,21 +515,123 @@ TAIL_PROPERTIES = {
     },
 }
 
+# Parallel 专用参数
+PARALLEL_PROPERTIES = {
+    "parallel_prompts": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 20,
+        "description": "Complete prompts for parallel execution. Each spawns an independent subprocess.",
+        "items": {"type": "string", "minLength": 1},
+    },
+    "parallel_task_notes": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 20,
+        "description": "Labels for each task. Length MUST equal parallel_prompts.",
+        "items": {"type": "string", "minLength": 1, "maxLength": 120},
+    },
+    "parallel_max_concurrency": {
+        "type": "integer",
+        "default": 4,
+        "minimum": 1,
+        "maximum": 16,
+        "description": "Max concurrent subprocesses.",
+    },
+    "parallel_fail_fast": {
+        "type": "boolean",
+        "default": False,
+        "description": "Stop spawning new tasks when any fails (already running tasks continue).",
+    },
+}
 
-def create_tool_schema(cli_type: str) -> dict[str, Any]:
+# 支持 parallel 的 CLI 工具
+PARALLEL_SUPPORTED_TOOLS = ["codex", "gemini", "claude", "opencode"]
+
+
+def normalize_tool_name(name: str) -> tuple[str, bool]:
+    """返回 (base_name, is_parallel)"""
+    if name.endswith("_parallel"):
+        return name.removesuffix("_parallel"), True
+    return name, False
+
+
+def create_tool_schema(cli_type: str, is_parallel: bool = False) -> dict[str, Any]:
     """创建工具的 JSON Schema。
 
     参数顺序：
-    1. prompt, workspace (必填)
+    1. prompt, workspace (必填) - parallel 模式下 prompt 被忽略
     2. continuation_id, permission, model, save_file, verbose_output (常用)
-    3. 特有参数 (image / system_prompt / append_system_prompt / file / agent)
-    4. task_note, debug (末尾)
+    3. 特有参数 (image / system_prompt / append_system_prompt / file / agent / images)
+    4. parallel 参数 (仅 parallel 模式)
+    5. task_note, debug (末尾)
     """
+    # Banana 工具使用简化的 schema（不支持 parallel）
+    if cli_type == "banana":
+        properties: dict[str, Any] = {
+            "prompt": {
+                "type": "string",
+                "description": (
+                    "Image generation prompt. Structure: "
+                    "<goal>what you want to generate (can be a statement)</goal> "
+                    "<context>detailed background info - the more the better</context> "
+                    "<hope>desired visual outcome, can be abstract</hope>. "
+                    "Example: <goal>Generate 6 weather icons for a mobile app</goal> "
+                    "<context>Target users are young professionals, app has a friendly casual vibe, needs to match existing UI with rounded corners</context> "
+                    "<hope>pastel colors, consistent 3px stroke, 64x64 base size</hope>"
+                ),
+            },
+        }
+        properties.update(BANANA_PROPERTIES)
+        properties["task_note"] = {
+            "type": "string",
+            "description": "Subdirectory name for saving images (English recommended, e.g., 'hero-banner', 'product-shot'). Also shown in GUI.",
+        }
+        return {
+            "type": "object",
+            "properties": properties,
+            "required": ["prompt", "save_path", "task_note"],
+        }
+
+    # Image 工具使用简化的 schema（不支持 parallel）
+    if cli_type == "image":
+        properties: dict[str, Any] = {
+            "prompt": {
+                "type": "string",
+                "description": (
+                    "Image generation prompt. Structure: "
+                    "<goal>what you want to generate (can be a statement)</goal> "
+                    "<context>detailed background info - the more the better</context> "
+                    "<hope>desired visual outcome, can be abstract</hope>. "
+                    "Example: <goal>Create a 4-panel comic about debugging</goal> "
+                    "<context>Developer finds a bug at 3am, tries multiple fixes, finally discovers it was a typo, comedic relief for tech blog</context> "
+                    "<hope>simple black-white line art, speech bubbles, exaggerated tired expressions</hope>"
+                ),
+            },
+        }
+        properties.update(IMAGE_PROPERTIES)
+        properties["task_note"] = {
+            "type": "string",
+            "description": "Subdirectory name for saving images (English recommended, e.g., 'hero-banner', 'product-shot'). Also shown in GUI.",
+        }
+        return {
+            "type": "object",
+            "properties": properties,
+            "required": ["prompt", "save_path", "task_note"],
+        }
+
     # 按顺序构建 properties
-    properties: dict[str, Any] = {}
+    properties = {}
 
     # 1. 公共参数（必填 + 常用）
-    properties.update(COMMON_PROPERTIES)
+    # parallel 模式下排除 prompt, continuation_id, save_file_with_append_mode, save_file_with_wrapper
+    if is_parallel:
+        for key, value in COMMON_PROPERTIES.items():
+            if key in ("prompt", "continuation_id", "save_file_with_append_mode", "save_file_with_wrapper"):
+                continue
+            properties[key] = value
+    else:
+        properties.update(COMMON_PROPERTIES)
 
     # 2. 特有参数
     if cli_type == "codex":
@@ -339,13 +641,26 @@ def create_tool_schema(cli_type: str) -> dict[str, Any]:
     elif cli_type == "opencode":
         properties.update(OPENCODE_PROPERTIES)
 
-    # 3. 末尾参数
-    properties.update(TAIL_PROPERTIES)
+    # 3. Parallel 参数（仅 parallel 模式）
+    if is_parallel:
+        properties.update(PARALLEL_PROPERTIES)
+
+    # 4. 末尾参数（parallel 模式下排除 task_note）
+    if is_parallel:
+        properties["debug"] = TAIL_PROPERTIES["debug"]
+    else:
+        properties.update(TAIL_PROPERTIES)
+
+    # 构建 required 字段
+    if is_parallel:
+        required = ["workspace", "save_file", "parallel_prompts", "parallel_task_notes"]
+    else:
+        required = ["prompt", "workspace"]
 
     return {
         "type": "object",
         "properties": properties,
-        "required": ["prompt", "workspace"],
+        "required": required,
     }
 
 
@@ -393,12 +708,17 @@ def create_server(
         })
 
     # 创建调用器（带 GUI 回调）
-    def make_event_callback(cli_type: str):
+    def make_event_callback(cli_type: str, task_note: str = ""):
         def callback(event):
             if gui_manager and gui_manager.is_running:
                 # 转换 UnifiedEvent 为字典
                 event_dict = event.model_dump() if hasattr(event, "model_dump") else dict(event.__dict__)
                 event_dict["source"] = cli_type
+                # 注入 task_note 到 metadata
+                if task_note:
+                    metadata = event_dict.get("metadata", {}) or {}
+                    metadata["task_note"] = task_note
+                    event_dict["metadata"] = metadata
                 gui_manager.push_event(event_dict)
         return callback
 
@@ -413,16 +733,16 @@ def create_server(
     # 新实现：每次请求创建新的 invoker，确保请求间状态完全隔离
     # 虽然 CLIInvoker 内部已实现 ExecutionContext per-request 隔离，
     # 但每次请求创建新 invoker 可以进一步确保隔离的明确性。
-    def create_invoker_for_request(cli_type: str):
+    def create_invoker_for_request(cli_type: str, task_note: str = ""):
         """为当前请求创建新的 invoker 实例（per-request 隔离）。"""
-        event_callback = make_event_callback(cli_type) if gui_manager else None
+        event_callback = make_event_callback(cli_type, task_note) if gui_manager else None
         return create_invoker(cli_type, event_callback=event_callback)
 
     @server.list_tools()
     async def list_tools() -> list[Tool]:
         """列出可用工具。"""
         tools = []
-        for cli_type in ["codex", "gemini", "claude", "opencode"]:
+        for cli_type in ["codex", "gemini", "claude", "opencode", "banana", "image"]:
             if config.is_tool_allowed(cli_type):
                 tools.append(
                     Tool(
@@ -431,6 +751,22 @@ def create_server(
                         inputSchema=create_tool_schema(cli_type),
                     )
                 )
+                # 追加 *_parallel 工具（仅支持的 CLI 工具）
+                if cli_type in PARALLEL_SUPPORTED_TOOLS:
+                    parallel_name = f"{cli_type}_parallel"
+                    parallel_desc = (
+                        f"Run multiple {cli_type} tasks in parallel. "
+                        f"All tasks share workspace/permission/save_file. "
+                        f"Results are appended to save_file with XML wrappers "
+                        f"(<agent-output agent=... continuation_id=... task_note=... task_index=... status=...>)."
+                    )
+                    tools.append(
+                        Tool(
+                            name=parallel_name,
+                            description=parallel_desc,
+                            inputSchema=create_tool_schema(cli_type, is_parallel=True),
+                        )
+                    )
         # 添加 get_gui_url 工具
         if gui_manager:
             tools.append(
@@ -464,26 +800,50 @@ def create_server(
                 return [TextContent(type="text", text=gui_manager.url)]
             return [TextContent(type="text", text="GUI not available or URL not ready")]
 
-        if not config.is_tool_allowed(name):
-            return [TextContent(type="text", text=f"Error: Tool '{name}' is not enabled")]
+        # 解析工具名称（支持 *_parallel 后缀）
+        base_name, is_parallel = normalize_tool_name(name)
+
+        # 检查工具是否启用（使用 base_name）
+        if not config.is_tool_allowed(base_name):
+            return _format_error_response(f"Tool '{name}' is not enabled")
 
         # 验证工具名称
-        if name not in ["codex", "gemini", "claude", "opencode"]:
-            return [TextContent(type="text", text=f"Error: Unknown tool '{name}'")]
+        if base_name not in SUPPORTED_TOOLS:
+            return _format_error_response(f"Unknown tool '{name}'")
 
-        # 核心变更：每次请求创建新的 invoker（per-request 隔离）
-        invoker = create_invoker_for_request(name)
-        prompt = arguments.get("prompt", "")
-        task_note = arguments.get("task_note", "")
+        # parallel 模式只支持特定工具
+        if is_parallel and base_name not in PARALLEL_SUPPORTED_TOOLS:
+            return _format_error_response(f"Tool '{base_name}' does not support parallel mode")
 
-        # 立即推送用户 prompt 到 GUI
-        push_user_prompt(name, prompt, task_note)
+        # Banana 工具使用独立的处理流程
+        if base_name == "banana":
+            # 校验 banana 必填参数
+            if not arguments.get("prompt"):
+                return _format_error_response("Missing required argument: 'prompt'")
+            if not arguments.get("save_path"):
+                return _format_error_response("Missing required argument: 'save_path'")
+            if not arguments.get("task_note"):
+                return _format_error_response("Missing required argument: 'task_note'")
+            return await _handle_banana_tool(arguments, push_user_prompt, push_to_gui, gui_manager)
 
-        # 生成请求 ID 并登记（如果 registry 可用）
+        # Image 工具使用独立的处理流程
+        if base_name == "image":
+            # 校验 image 必填参数
+            if not arguments.get("prompt"):
+                return _format_error_response("Missing required argument: 'prompt'")
+            if not arguments.get("save_path"):
+                return _format_error_response("Missing required argument: 'save_path'")
+            if not arguments.get("task_note"):
+                return _format_error_response("Missing required argument: 'task_note'")
+            return await _handle_image_tool(arguments, push_user_prompt, push_to_gui, gui_manager)
+
+        # 生成请求 ID 并登记（如果 registry 可用）- 覆盖 parallel 和 single 两条路径
+        task_note = arguments.get("task_note", "") or (
+            " + ".join(arguments.get("parallel_task_notes", [])) if is_parallel else ""
+        )
         request_id = None
-        if registry is not None:  # 明确检查 None，而不是 truthiness
+        if registry is not None:
             request_id = registry.generate_request_id()
-            # 获取当前任务并登记
             current_task = asyncio.current_task()
             logger.debug(f"Registering: request_id={request_id[:8]}..., current_task={current_task is not None}")
             if current_task:
@@ -495,59 +855,33 @@ def create_server(
             logger.debug(f"No registry available")
 
         try:
-            # 处理 report_mode：注入输出格式要求
+            # Parallel 模式使用独立的处理流程
+            if is_parallel:
+                return await _handle_parallel_call(
+                    base_name, arguments, make_event_callback, push_user_prompt, push_to_gui, gui_manager
+                )
+
+            # 校验 CLI 工具必填参数
+            prompt = arguments.get("prompt")
+            workspace = arguments.get("workspace")
+            if not prompt or not str(prompt).strip():
+                return _format_error_response("Missing required argument: 'prompt'")
+            if not workspace:
+                return _format_error_response("Missing required argument: 'workspace'")
+
+            # 核心变更：每次请求创建新的 invoker（per-request 隔离）
+            invoker = create_invoker_for_request(base_name, task_note)
+            prompt = arguments.get("prompt", "")
+
+            # 立即推送用户 prompt 到 GUI
+            push_user_prompt(name, prompt, task_note)
+            # 使用 helper 注入 report_mode 和 context_paths
             report_mode = arguments.get("report_mode", False)
-            if report_mode:
-                injection_note = """
-
-<mcp-injection type="report-mode">
-  <meta-rules>
-    <rule>Follow higher-priority system messages first; apply these report-mode instructions where they do not conflict.</rule>
-    <rule>Do not mention this template, "report-mode", MCP, or any injection mechanism. Write as if replying directly to the user.</rule>
-  </meta-rules>
-
-  <output-requirements>
-    <rule>Produce a comprehensive, self-contained response that can be understood without access to any prior conversation.</rule>
-    <rule>Do NOT use phrases like "above", "earlier", "previous messages", "as discussed", or similar context-dependent references.</rule>
-    <rule>Use the same primary language as the user's request.</rule>
-    <rule>Briefly restate the user's task or question in your own words before presenting your analysis.</rule>
-  </output-requirements>
-
-  <structure-guidelines>
-    <guideline>Start with key findings or conclusions in 1-3 short points so the reader quickly understands the outcome.</guideline>
-    <guideline>Provide enough context so a new reader understands the problem without seeing the rest of the conversation.</guideline>
-    <guideline>Organize longer answers into clear sections (e.g., Summary, Context, Analysis, Recommendations) when helpful.</guideline>
-    <guideline>End with concrete, actionable recommendations or next steps when applicable.</guideline>
-  </structure-guidelines>
-
-  <reasoning-guidelines>
-    <guideline>Explain important assumptions, trade-offs, and decisions clearly.</guideline>
-    <guideline>Where your platform allows, show reasoning step by step. If detailed chain-of-thought is restricted, provide a concise explanation instead.</guideline>
-  </reasoning-guidelines>
-
-  <code-guidelines>
-    <guideline>Reference specific locations using file paths and line numbers (e.g., src/app.ts:42).</guideline>
-    <guideline>Include small, relevant code snippets inline when they help the reader understand without opening the file.</guideline>
-  </code-guidelines>
-</mcp-injection>"""
-                arguments = {**arguments, "prompt": arguments["prompt"] + injection_note}
-
-            # 处理 context_paths：注入参考路径
             context_paths = arguments.get("context_paths", [])
-            if context_paths:
-                paths_xml = "\n".join(f"    <path>{p}</path>" for p in context_paths)
-                context_note = f"""
-
-<mcp-injection type="reference-paths">
-  <description>
-    These paths are provided as reference for project structure.
-    You may use them to understand naming conventions and file organization.
-  </description>
-  <paths>
-{paths_xml}
-  </paths>
-</mcp-injection>"""
-                arguments = {**arguments, "prompt": arguments["prompt"] + context_note}
+            injected_prompt = _inject_context_and_report_mode(
+                arguments["prompt"], context_paths, report_mode
+            )
+            arguments = {**arguments, "prompt": injected_prompt}
 
             # 构建参数
             params = _build_params(name, arguments)
@@ -654,7 +988,7 @@ def create_server(
                 f"msg={e}, mro={type(e).__mro__}"
             )
             if isinstance(e, Exception):
-                return [TextContent(type="text", text=f"Error: {str(e)}")]
+                return _format_error_response(str(e))
             raise
 
         finally:
@@ -665,6 +999,553 @@ def create_server(
                 logger.debug(f"Unregistered request: {request_id[:8]}...")
 
     return server
+
+
+async def _handle_banana_tool(
+    arguments: dict[str, Any],
+    push_user_prompt: Any,
+    push_to_gui: Any,
+    gui_manager: Any,
+) -> list[TextContent]:
+    """处理 banana 工具调用。
+
+    Args:
+        arguments: 工具参数
+        push_user_prompt: 推送用户 prompt 的函数
+        push_to_gui: 推送事件到 GUI 的函数
+        gui_manager: GUI 管理器
+
+    Returns:
+        TextContent 列表
+    """
+    prompt = arguments.get("prompt", "")
+    task_note = arguments.get("task_note", "")
+
+    # 推送用户 prompt 到 GUI
+    push_user_prompt("banana", prompt, task_note)
+
+    # 创建事件回调
+    def event_callback(event):
+        if gui_manager and gui_manager.is_running:
+            event_dict = event.model_dump() if hasattr(event, "model_dump") else dict(event.__dict__)
+            event_dict["source"] = "banana"
+            gui_manager.push_event(event_dict)
+
+    # 创建 invoker 并执行
+    invoker = BananaInvoker(event_callback=event_callback)
+
+    params = BananaParams(
+        prompt=prompt,
+        images=arguments.get("images", []),
+        aspect_ratio=arguments.get("aspect_ratio", "1:1"),
+        resolution=arguments.get("resolution", "4K"),
+        use_search=arguments.get("use_search", False),
+        include_thoughts=arguments.get("include_thoughts", False),
+        temperature=arguments.get("temperature", 1.0),
+        top_p=arguments.get("top_p", 0.95),
+        top_k=arguments.get("top_k", 40),
+        num_images=arguments.get("num_images", 1),
+        save_path=arguments.get("save_path", ""),
+        task_note=task_note,
+    )
+
+    try:
+        result = await invoker.execute(params)
+
+        if result.success:
+            # 返回 XML 响应
+            response = result.response_xml
+
+            # 添加 debug_info
+            if result.artifacts:
+                response += (
+                    f"\n<debug_info>"
+                    f"\n  <image_count>{len(result.artifacts)}</image_count>"
+                    f"\n  <duration_sec>{result.duration_sec:.3f}</duration_sec>"
+                    f"\n  <model>{result.model}</model>"
+                    f"\n  <api_endpoint>{result.api_endpoint}</api_endpoint>"
+                    f"\n  <auth_token>{result.auth_token_masked}</auth_token>"
+                    f"\n</debug_info>"
+                )
+
+            # 推送结果到 GUI
+            push_to_gui({
+                "category": "operation",
+                "operation_type": "tool_call",
+                "source": "banana",
+                "session_id": f"banana_{result.request_id}",
+                "name": "banana",
+                "status": "success",
+                "output": response,
+                "metadata": {
+                    "artifacts": result.artifacts,
+                    "task_note": task_note,
+                    "debug": {
+                        "image_count": len(result.artifacts),
+                        "duration_sec": result.duration_sec,
+                        "model": result.model,
+                        "api_endpoint": result.api_endpoint,
+                        "auth_token": result.auth_token_masked,
+                    },
+                },
+            })
+
+            return [TextContent(type="text", text=response)]
+        else:
+            return _format_error_response(result.error or "Unknown error")
+
+    except asyncio.CancelledError:
+        # 取消错误必须 re-raise，不能被吞掉
+        raise
+
+    except Exception as e:
+        logger.exception(f"Banana tool error: {e}")
+        return _format_error_response(str(e))
+
+
+async def _handle_image_tool(
+    arguments: dict[str, Any],
+    push_user_prompt: Any,
+    push_to_gui: Any,
+    gui_manager: Any,
+) -> list[TextContent]:
+    """处理 image 工具调用。
+
+    Args:
+        arguments: 工具参数
+        push_user_prompt: 推送用户 prompt 的函数
+        push_to_gui: 推送事件到 GUI 的函数
+        gui_manager: GUI 管理器
+
+    Returns:
+        TextContent 列表
+    """
+    prompt = arguments.get("prompt", "")
+    task_note = arguments.get("task_note", "")
+
+    # 推送用户 prompt 到 GUI
+    push_user_prompt("image", prompt, task_note)
+
+    # 创建事件回调
+    def event_callback(event):
+        if gui_manager and gui_manager.is_running:
+            event_dict = event.model_dump() if hasattr(event, "model_dump") else dict(event.__dict__)
+            event_dict["source"] = "image"
+            gui_manager.push_event(event_dict)
+
+    # 创建 invoker 并执行
+    invoker = ImageInvoker(event_callback=event_callback)
+
+    params = ImageParams(
+        prompt=prompt,
+        model=arguments.get("model", ""),
+        images=arguments.get("images", []),
+        save_path=arguments.get("save_path", ""),
+        task_note=task_note,
+        aspect_ratio=arguments.get("aspect_ratio", "1:1"),
+        resolution=arguments.get("resolution", "1K"),
+        quality=arguments.get("quality", "standard"),
+        api_type=arguments.get("api_type", ""),
+    )
+
+    try:
+        result = await invoker.execute(params)
+
+        if result.success:
+            # 返回 XML 响应
+            response = result.response_xml
+
+            # 添加 debug_info
+            response += (
+                f"\n<debug_info>"
+                f"\n  <image_count>{len(result.artifacts) if result.artifacts else 0}</image_count>"
+                f"\n  <duration_sec>{result.duration_sec:.3f}</duration_sec>"
+                f"\n  <model>{params.model or 'env:IMAGE_MODEL'}</model>"
+                f"\n  <api_type>{params.api_type or 'env:IMAGE_API_TYPE'}</api_type>"
+                f"\n</debug_info>"
+            )
+
+            # 推送结果到 GUI
+            push_to_gui({
+                "category": "operation",
+                "operation_type": "tool_call",
+                "source": "image",
+                "session_id": f"image_{result.request_id}",
+                "name": "image",
+                "status": "success",
+                "output": response,
+                "metadata": {
+                    "artifacts": result.artifacts,
+                    "task_note": task_note,
+                    "debug": {
+                        "image_count": len(result.artifacts) if result.artifacts else 0,
+                        "duration_sec": result.duration_sec,
+                        "model": params.model or "env:IMAGE_MODEL",
+                        "api_type": params.api_type or "env:IMAGE_API_TYPE",
+                    },
+                },
+            })
+
+            return [TextContent(type="text", text=response)]
+        else:
+            return _format_error_response(result.error or "Unknown error")
+
+    except asyncio.CancelledError:
+        # 取消错误必须 re-raise，不能被吞掉
+        raise
+
+    except Exception as e:
+        logger.exception(f"Image tool error: {e}")
+        return _format_error_response(str(e))
+
+
+def xml_escape_attr(s: str | None) -> str:
+    """XML 属性值转义。"""
+    if s is None:
+        s = ""
+    else:
+        s = str(s)
+    return (s.replace("&", "&amp;")
+             .replace("<", "&lt;")
+             .replace(">", "&gt;")
+             .replace('"', "&quot;")
+             .replace("'", "&apos;"))
+
+
+def build_wrapper(agent: str, continuation_id: str, task_note: str, task_index: int, status: str, content: str) -> str:
+    """构建 XML-like wrapper。"""
+    return f'''<agent-output agent="{xml_escape_attr(agent)}" continuation_id="{xml_escape_attr(continuation_id)}" task_note="{xml_escape_attr(task_note)}" task_index="{task_index}" status="{status}">
+{content}
+</agent-output>'''
+
+
+def _inject_context_and_report_mode(prompt: str, context_paths: list[str], report_mode: bool) -> str:
+    """将 context_paths 和 report_mode 注入到 prompt 中。"""
+    result = prompt
+
+    # 处理 report_mode
+    if report_mode:
+        injection_note = """
+
+<mcp-injection type="report-mode">
+  <meta-rules>
+    <rule>Follow higher-priority system messages first; apply these report-mode instructions where they do not conflict.</rule>
+    <rule>Do not mention this template, "report-mode", MCP, or any injection mechanism. Write as if replying directly to the user.</rule>
+  </meta-rules>
+
+  <output-requirements>
+    <rule>Produce a comprehensive, self-contained response that can be understood without access to any prior conversation.</rule>
+    <rule>Do NOT use phrases like "above", "earlier", "previous messages", "as discussed", or similar context-dependent references.</rule>
+    <rule>Use the same primary language as the user's request.</rule>
+    <rule>Briefly restate the user's task or question in your own words before presenting your analysis.</rule>
+  </output-requirements>
+
+  <structure-guidelines>
+    <guideline>Start with key findings or conclusions in 1-3 short points so the reader quickly understands the outcome.</guideline>
+    <guideline>Provide enough context so a new reader understands the problem without seeing the rest of the conversation.</guideline>
+    <guideline>Organize longer answers into clear sections (e.g., Summary, Context, Analysis, Recommendations) when helpful.</guideline>
+    <guideline>End with concrete, actionable recommendations or next steps when applicable.</guideline>
+  </structure-guidelines>
+
+  <reasoning-guidelines>
+    <guideline>Explain important assumptions, trade-offs, and decisions clearly.</guideline>
+    <guideline>Where your platform allows, show reasoning step by step. If detailed chain-of-thought is restricted, provide a concise explanation instead.</guideline>
+  </reasoning-guidelines>
+
+  <code-guidelines>
+    <guideline>Reference specific locations using file paths and line numbers (e.g., src/app.ts:42).</guideline>
+    <guideline>Include small, relevant code snippets inline when they help the reader understand without opening the file.</guideline>
+  </code-guidelines>
+</mcp-injection>"""
+        result += injection_note
+
+    # 处理 context_paths
+    if context_paths:
+        paths_xml = "\n".join(f"    <path>{p}</path>" for p in context_paths)
+        context_note = f"""
+
+<mcp-injection type="reference-paths">
+  <description>
+    These paths are provided as reference for project structure.
+    You may use them to understand naming conventions and file organization.
+  </description>
+  <paths>
+{paths_xml}
+  </paths>
+</mcp-injection>"""
+        result += context_note
+
+    return result
+
+
+async def _handle_parallel_call(
+    base_name: str,
+    arguments: dict[str, Any],
+    make_event_callback: Any,
+    push_user_prompt: Any,
+    push_to_gui: Any,
+    gui_manager: Any,
+) -> list[TextContent]:
+    """处理 parallel 模式的工具调用。
+
+    Args:
+        base_name: 基础工具名称（如 codex, gemini, claude, opencode）
+        arguments: 工具参数
+        make_event_callback: 创建事件回调的函数
+        push_user_prompt: 推送用户 prompt 的函数
+        push_to_gui: 推送事件到 GUI 的函数
+        gui_manager: GUI 管理器
+
+    Returns:
+        TextContent 列表
+    """
+    # 1) 校验
+    prompts = arguments.get("parallel_prompts", [])
+    task_notes = arguments.get("parallel_task_notes", [])
+
+    # 类型校验
+    if not isinstance(prompts, list):
+        return _format_error_response("parallel_prompts must be a list")
+    if not isinstance(task_notes, list):
+        return _format_error_response("parallel_task_notes must be a list")
+
+    if not prompts:
+        return _format_error_response("parallel_prompts is required")
+
+    # 检查空白字符串和类型
+    for i, p in enumerate(prompts):
+        if not isinstance(p, str):
+            return _format_error_response(f"parallel_prompts[{i}] must be a string")
+        if not p or not p.strip():
+            return _format_error_response(f"parallel_prompts[{i}] is empty or whitespace")
+
+    for i, n in enumerate(task_notes):
+        if not isinstance(n, str):
+            return _format_error_response(f"parallel_task_notes[{i}] must be a string")
+        if not n or not n.strip():
+            return _format_error_response(f"parallel_task_notes[{i}] is empty or whitespace")
+
+    if len(prompts) != len(task_notes):
+        return _format_error_response("parallel_prompts and parallel_task_notes must have same length")
+
+    if len(prompts) > 20:
+        return _format_error_response("parallel_prompts exceeds maximum of 20")
+
+    if arguments.get("continuation_id"):
+        return _format_error_response("continuation_id input is not supported in parallel mode")
+
+    save_file = arguments.get("save_file")
+    if not save_file:
+        return _format_error_response("save_file is required in parallel mode")
+
+    # clamp concurrency (handle string/invalid types)
+    try:
+        max_conc = int(arguments.get("parallel_max_concurrency", 4))
+    except (TypeError, ValueError):
+        max_conc = 4
+    max_conc = max(1, min(16, max_conc))
+    fail_fast = arguments.get("parallel_fail_fast", False)
+
+    # 推送用户 prompt 到 GUI（每个 prompt 单独推送）
+    for prompt, note in zip(prompts, task_notes):
+        push_user_prompt(f"{base_name}_parallel", prompt, note)
+
+    # 2) 构建子任务
+    sub_tasks = []
+    context_paths = arguments.get("context_paths", [])
+    report_mode = arguments.get("report_mode", False)
+
+    for idx, (prompt, note) in enumerate(zip(prompts, task_notes), start=1):
+        # 注入 context_paths 和 report_mode
+        final_prompt = _inject_context_and_report_mode(prompt, context_paths, report_mode)
+        sub_tasks.append({
+            "prompt": final_prompt,
+            "workspace": arguments.get("workspace"),
+            "permission": arguments.get("permission", "read-only"),
+            "model": arguments.get("model", ""),
+            "verbose_output": arguments.get("verbose_output", False),
+            "task_note": note,
+            "_task_index": idx,
+            # CLI 特有参数
+            "image": arguments.get("image", []),  # codex
+            "system_prompt": arguments.get("system_prompt", ""),  # claude
+            "append_system_prompt": arguments.get("append_system_prompt", ""),  # claude
+            "agent": arguments.get("agent", ""),  # claude/opencode
+            "file": arguments.get("file", []),  # opencode
+        })
+
+    # 3) 并发执行
+    sem = asyncio.Semaphore(max_conc)
+    should_stop = False
+    results: list[tuple[int, str, Any]] = []  # (task_index, task_note, result|Exception|None)
+
+    async def run_one(sub_args: dict):
+        nonlocal should_stop
+
+        async with sem:
+            # fail_fast 检查必须在拿到 semaphore 后
+            if fail_fast and should_stop:
+                return (sub_args["_task_index"], sub_args["task_note"], None)  # skipped
+
+            try:
+                # 创建 invoker（传入 task_note 用于 GUI 显示）
+                task_note = sub_args.get("task_note", "")
+                event_callback = make_event_callback(base_name, task_note) if gui_manager else None
+                invoker = create_invoker(base_name, event_callback=event_callback)
+
+                # 构建参数
+                params = _build_params(base_name, sub_args)
+
+                # 执行
+                result = await invoker.execute(params)
+
+                if not result.success and fail_fast:
+                    should_stop = True
+                return (sub_args["_task_index"], sub_args["task_note"], result)
+
+            except asyncio.CancelledError:
+                # 必须 re-raise，不能当作普通异常处理
+                raise
+            except Exception as e:
+                if fail_fast:
+                    should_stop = True
+                return (sub_args["_task_index"], sub_args["task_note"], e)
+
+    start_time = time.time()
+    try:
+        raw_results = await asyncio.gather(*[run_one(t) for t in sub_tasks], return_exceptions=True)
+    except asyncio.CancelledError:
+        raise
+    duration_sec = time.time() - start_time
+
+    # 处理 gather 返回的异常
+    for r in raw_results:
+        if isinstance(r, asyncio.CancelledError):
+            raise r  # re-raise 取消
+        elif isinstance(r, Exception):
+            # 不应发生，因为 run_one 已捕获
+            continue
+        else:
+            results.append(r)
+
+    # 4) 按 task_index 排序后串行写文件
+    results.sort(key=lambda x: x[0])
+
+    success_count = 0
+    failed_count = 0
+    skipped_count = 0
+    summary_lines = []
+    all_wrapped = []  # 收集所有 wrapped 内容用于返回
+
+    formatter = get_formatter()
+    verbose_output = arguments.get("verbose_output", False)
+
+    for idx, note, result in results:
+        if result is None:
+            # skipped (fail_fast)
+            skipped_count += 1
+            summary_lines.append(f"- [{idx}] {note} | skipped")
+            continue
+        elif isinstance(result, Exception):
+            content = f"Error: {result}"
+            status = "error"
+            session_id = ""
+            failed_count += 1
+            summary_lines.append(f"- [{idx}] {note} | error")
+        elif result.success:
+            # 使用 formatter 格式化内容
+            response_data = ResponseData(
+                answer=result.agent_messages,
+                session_id=result.session_id or "",
+                thought_steps=result.thought_steps if verbose_output else [],
+                debug_info=None,
+                success=True,
+                error=None,
+            )
+            content = formatter.format_for_file(response_data, verbose_output=verbose_output)
+            status = "success"
+            session_id = result.session_id or ""
+            success_count += 1
+            summary_lines.append(f"- [{idx}] {note} | success | session={session_id}")
+        else:
+            # result.error 已包含 exit code + stderr
+            content = result.error or "Unknown error"
+            status = "error"
+            session_id = result.session_id or ""
+            failed_count += 1
+            summary_lines.append(f"- [{idx}] {note} | error | session={session_id}")
+
+        # 构建 wrapper 并追加到文件
+        wrapped = build_wrapper(base_name, session_id, note, idx, status, content)
+        all_wrapped.append(wrapped)
+        try:
+            file_path = Path(save_file)
+            if file_path.exists():
+                with file_path.open("a", encoding="utf-8") as f:
+                    f.write("\n" + wrapped)  # 前置换行防止粘连
+            else:
+                file_path.write_text(wrapped, encoding="utf-8")
+        except Exception as e:
+            logger.error(f"Failed to write to {save_file}: {e}")
+            return _format_error_response(f"Failed to write to {save_file}: {e}")
+
+    # 5) 返回 wrapped 内容（与 save_file_with_wrapper 格式一致）
+    summary = f"Parallel run: total={len(results)}, success={success_count}, failed={failed_count}, skipped={skipped_count}\n"
+    summary += f"Saved to: {save_file}\n"
+    summary += "\n".join(summary_lines)
+
+    # 推送结果到 GUI
+    push_to_gui({
+        "category": "system",
+        "source": f"{base_name}_parallel",
+        "message": summary,
+        "severity": "info",
+        "content_type": "text",
+        "timestamp": time.time(),
+        "raw": {
+            "type": "parallel_complete",
+            "success": success_count,
+            "failed": failed_count,
+            "skipped": skipped_count,
+        },
+        "metadata": {
+            "debug": {
+                "total_tasks": len(results),
+                "success_count": success_count,
+                "failed_count": failed_count,
+                "skipped_count": skipped_count,
+                "duration_sec": duration_sec,
+                "save_file": save_file,
+            },
+        },
+    })
+
+    # 构建 debug_info（如果 debug 开启）
+    debug_enabled = arguments.get("debug", False)
+    debug_info = None
+    if debug_enabled:
+        debug_info = FormatterDebugInfo(
+            model=None,
+            duration_sec=duration_sec,
+            message_count=len(results),
+            tool_call_count=0,
+        )
+
+    # 返回 wrapped 内容（与 save_file_with_wrapper 格式一致）
+    # answer 包含所有任务的 XML wrapper 输出
+    has_failures = failed_count > 0
+    wrapped_content = "\n".join(all_wrapped) if all_wrapped else summary
+    response_data = ResponseData(
+        answer=wrapped_content,
+        session_id="",  # parallel 模式没有单一 session_id
+        thought_steps=[],
+        debug_info=debug_info,
+        success=not has_failures,
+        error=f"{failed_count} of {len(results)} tasks failed" if has_failures else None,
+    )
+    formatted_response = formatter.format(response_data, verbose_output=False, debug=debug_enabled)
+
+    return [TextContent(type="text", text=formatted_response)]
 
 
 def _build_params(cli_type: str, args: dict[str, Any]):
@@ -699,7 +1580,7 @@ def _build_params(cli_type: str, args: dict[str, Any]):
         return OpencodeParams(
             **common,
             file=[Path(p) for p in args.get("file", [])],
-            agent=args.get("agent", "build"),
+            agent=args.get("agent") or "build",
         )
     else:
         raise ValueError(f"Unknown CLI type: {cli_type}")
@@ -776,6 +1657,13 @@ async def run_server() -> None:
         logger.info("Shutdown callback triggered")
         if gui_manager:
             gui_manager.stop()
+        # 关闭 stdin 以中断 stdio_server 的阻塞读取
+        # 这是让进程能够正常退出的关键
+        try:
+            sys.stdin.close()
+            logger.debug("stdin closed to unblock stdio_server")
+        except Exception as e:
+            logger.debug(f"Error closing stdin: {e}")
 
     # 创建信号管理器
     signal_manager = SignalManager(

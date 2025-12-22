@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-统一的 MCP（Model Context Protocol）服务器，用于 CLI AI 代理。提供单一接口调用 Codex、Gemini、Claude 和 OpenCode CLI 工具。
+统一的 MCP（Model Context Protocol）服务器，用于 CLI AI 代理。提供单一接口调用 Codex、Gemini、Claude、OpenCode CLI 工具和 Nano Banana Pro 图片生成。
 
 ## 为什么选择 cli-agent-mcp？
 
@@ -14,6 +14,7 @@
 - **Codex**：批评家。锐利的分析目光捕捉你遗漏的细节，挑战假设，发现边界情况。
 - **Gemini**：创意者。发散思维，意想不到的连接，那些你不知道自己需要的灵感火花。
 - **Claude**：书记员。忠实执行，清晰文档，把想法变成可运行的代码。
+- **Banana**：艺术家。高保真图片生成，用于 UI 原型、产品视觉和创意资产。
 
 **想要持久化结果？** 使用 `save_file` 捕获 agent 输出，然后让 Claude 综合多次分析的洞察。
 
@@ -53,7 +54,8 @@ pip install -e .
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
-| `CAM_TOOLS` | 允许的工具列表，逗号分隔（空=全部） | `""`（全部） |
+| `CAM_ENABLE` | 启用的工具列表，逗号分隔（空=全部） | `""`（全部） |
+| `CAM_DISABLE` | 禁用的工具列表，逗号分隔（从 enable 中减去） | `""` |
 | `CAM_GUI` | 启用 GUI 仪表盘 | `true` |
 | `CAM_GUI_DETAIL` | GUI 详细模式 | `false` |
 | `CAM_GUI_KEEP` | 退出时保留 GUI | `false` |
@@ -77,7 +79,7 @@ pip install -e .
 | `continuation_id` | string | | `""` | 传入上次响应中的 ID 以继续对话 |
 | `permission` | string | | `read-only` | 权限级别：`read-only`、`workspace-write`、`unlimited` |
 | `model` | string | | `""` | 模型覆盖（仅在明确请求时指定） |
-| `save_file` | string | | `""` | 将代理输出保存到文件路径 |
+| `save_file` | string | | `""` | 大输出首选。直接写入文件，避免上下文溢出 |
 | `report_mode` | boolean | | `false` | 生成独立报告格式 |
 | `save_file_with_wrapper` | boolean | | `false` | 用 `<agent-output>` XML 标签包裹输出 |
 | `save_file_with_append_mode` | boolean | | `false` | 追加到文件而非覆盖 |
@@ -100,7 +102,7 @@ pip install -e .
 | `continuation_id` | string | | `""` | 传入上次响应中的 ID 以继续对话 |
 | `permission` | string | | `read-only` | 权限级别：`read-only`、`workspace-write`、`unlimited` |
 | `model` | string | | `""` | 模型覆盖 |
-| `save_file` | string | | `""` | 将代理输出保存到文件路径 |
+| `save_file` | string | | `""` | 大输出首选。直接写入文件，避免上下文溢出 |
 | `report_mode` | boolean | | `false` | 生成独立报告格式 |
 | `save_file_with_wrapper` | boolean | | `false` | 用 `<agent-output>` XML 标签包裹输出 |
 | `save_file_with_append_mode` | boolean | | `false` | 追加到文件而非覆盖 |
@@ -122,7 +124,7 @@ pip install -e .
 | `continuation_id` | string | | `""` | 传入上次响应中的 ID 以继续对话 |
 | `permission` | string | | `read-only` | 权限级别：`read-only`、`workspace-write`、`unlimited` |
 | `model` | string | | `""` | 模型覆盖（`sonnet`、`opus` 或完整模型名） |
-| `save_file` | string | | `""` | 将代理输出保存到文件路径 |
+| `save_file` | string | | `""` | 大输出首选。直接写入文件，避免上下文溢出 |
 | `report_mode` | boolean | | `false` | 生成独立报告格式 |
 | `save_file_with_wrapper` | boolean | | `false` | 用 `<agent-output>` XML 标签包裹输出 |
 | `save_file_with_append_mode` | boolean | | `false` | 追加到文件而非覆盖 |
@@ -147,7 +149,7 @@ pip install -e .
 | `continuation_id` | string | | `""` | 传入上次响应中的 ID 以继续对话 |
 | `permission` | string | | `read-only` | 权限级别：`read-only`、`workspace-write`、`unlimited` |
 | `model` | string | | `""` | 模型覆盖（格式：`provider/model`） |
-| `save_file` | string | | `""` | 将代理输出保存到文件路径 |
+| `save_file` | string | | `""` | 大输出首选。直接写入文件，避免上下文溢出 |
 | `report_mode` | boolean | | `false` | 生成独立报告格式 |
 | `save_file_with_wrapper` | boolean | | `false` | 用 `<agent-output>` XML 标签包裹输出 |
 | `save_file_with_append_mode` | boolean | | `false` | 追加到文件而非覆盖 |
@@ -157,6 +159,63 @@ pip install -e .
 | `agent` | string | | `build` | 代理类型：`build`、`plan` 等 |
 | `task_note` | string | | `""` | GUI 显示标签 |
 | `debug` | boolean | | (全局) | 覆盖此次调用的调试设置 |
+
+### banana
+
+通过 Nano Banana Pro API 生成高保真图片。
+
+**最适合**：UI 原型、产品视觉、信息图、建筑效果图、角色艺术
+
+Nano Banana Pro 拥有卓越的理解能力和视觉表达能力——你的提示词创意才是唯一的限制，而不是模型。
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `prompt` | string | ✓ | - | 图片生成提示词 |
+| `save_path` | string | ✓ | - | 图片保存的基础目录 |
+| `task_note` | string | ✓ | - | 子目录名称（建议英文，如 'hero-banner'）。文件保存到 `{save_path}/{task_note}/` |
+| `images` | array | | `[]` | 参考图片（绝对路径），可选 role 和 label |
+| `aspect_ratio` | string | | `"1:1"` | 图片比例：`1:1`、`2:3`、`3:2`、`3:4`、`4:3`、`4:5`、`5:4`、`9:16`、`16:9`、`21:9` |
+| `resolution` | string | | `"1K"` | 图片分辨率：`1K`、`2K`、`4K` |
+| `include_thoughts` | boolean | | `false` | 在响应中包含思维过程 |
+
+**环境变量：**
+
+| 变量 | 必填 | 默认值 | 说明 |
+|------|------|--------|------|
+| `BANANA_AUTH_TOKEN` | ✓ | - | Google API 密钥或 Bearer 令牌 |
+| `BANANA_ENDPOINT` | | `https://generativelanguage.googleapis.com` | API 端点（版本路径自动补全） |
+
+**提示词最佳实践：**
+- 明确请求图片（如以 "Generate an image:" 开头或包含 `"output":"image"`）
+- 复杂请求使用结构化规格（JSON / XML 标签 / 标签分区）
+- 使用 `MUST/STRICT/CRITICAL` 标记不可协商的约束
+- 添加负面约束（如 "no watermark"、"no distorted hands"）
+
+### image
+
+通过 OpenRouter 兼容或 OpenAI 兼容端点生成图片。
+
+**最适合**：需要兼容多种提供商的通用图片生成。如需使用 Gemini 模型获得最佳效果，请使用 `banana` 工具。
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `prompt` | string | ✓ | - | 图片生成提示词 |
+| `save_path` | string | ✓ | - | 图片保存的基础目录 |
+| `task_note` | string | ✓ | - | 子目录名称（建议英文，如 'hero-banner'）。文件保存到 `{save_path}/{task_note}/` |
+| `images` | array | | `[]` | 参考图片（绝对路径），可选 role 和 label |
+| `aspect_ratio` | string | | `"1:1"` | 图片比例：`1:1`、`2:3`、`3:2`、`3:4`、`4:3`、`4:5`、`5:4`、`9:16`、`16:9`、`21:9` |
+| `resolution` | string | | `"1K"` | 图片分辨率：`1K`、`2K`、`4K` |
+| `model` | string | | (env) | 用于生成的模型 |
+| `api_format` | string | | `"auto"` | API 格式：`auto`、`openrouter_chat`、`openai_images`、`openai_responses` |
+
+**环境变量：**
+
+| 变量 | 必填 | 默认值 | 说明 |
+|------|------|--------|------|
+| `IMAGE_AUTH_TOKEN` | ✓ | - | 图片生成 API 密钥 |
+| `IMAGE_ENDPOINT` | | `https://openrouter.ai/api` | API 端点（版本路径自动补全） |
+| `IMAGE_MODEL` | | `gpt-image-1` | 默认模型 |
+| `IMAGE_API_FORMAT` | | `openrouter_chat` | API 格式：`openrouter_chat`、`openai_images`、`openai_responses` |
 
 ### get_gui_url
 
@@ -286,11 +345,11 @@ pip install -e .
 
 ## 权限级别
 
-| 级别 | 说明 | Codex | Gemini | Claude | OpenCode |
-|------|------|-------|--------|--------|----------|
-| `read-only` | 只能读取文件 | `--sandbox read-only` | 仅只读工具 | `--tools Read,Grep,Glob` | `edit: deny, bash: deny` |
-| `workspace-write` | 可在工作区内修改文件 | `--sandbox workspace-write` | 全部工具 + sandbox | `--tools Read,Edit,Write,Bash` | `edit: allow, bash: ask` |
-| `unlimited` | 完全系统访问（谨慎使用） | `--sandbox danger-full-access` | 全部工具，无 sandbox | `--tools default` | `edit: allow, bash: allow` |
+| 级别 | 说明 | Codex | Gemini | Claude | OpenCode | Banana |
+|------|------|-------|--------|--------|----------|--------|
+| `read-only` | 只能读取文件 | `--sandbox read-only` | 仅只读工具 | `--tools Read,Grep,Glob` | `edit: deny, bash: deny` | 仅读取 workspace 内图片 |
+| `workspace-write` | 可在工作区内修改文件 | `--sandbox workspace-write` | 全部工具 + sandbox | `--tools Read,Edit,Write,Bash` | `edit: allow, bash: ask` | 仅写入 workspace |
+| `unlimited` | 完全系统访问（谨慎使用） | `--sandbox danger-full-access` | 全部工具，无 sandbox | `--tools default` | `edit: allow, bash: allow` | 完全访问 |
 
 ## 调试模式
 
@@ -395,7 +454,23 @@ export CAM_LOG_DEBUG=true
       "command": "uvx",
       "args": ["cli-agent-mcp"],
       "env": {
-        "CAM_TOOLS": "claude,gemini"
+        "CAM_ENABLE": "claude,gemini"
+      }
+    }
+  }
+}
+```
+
+### 禁用图片工具
+
+```json
+{
+  "mcpServers": {
+    "cli-agent-mcp": {
+      "command": "uvx",
+      "args": ["cli-agent-mcp"],
+      "env": {
+        "CAM_DISABLE": "banana,image"
       }
     }
   }

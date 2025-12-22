@@ -14,12 +14,7 @@ from pathlib import Path
 
 import pytest
 
-# 添加 shared 到路径
-import sys
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "shared"))
-
-from invokers import (
+from cli_agent_mcp.shared.invokers import (
     CLIType,
     ClaudeInvoker,
     ClaudeParams,

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from parsers import (
+from cli_agent_mcp.shared.parsers import (
     CLISource,
     ClaudeParser,
     CodexParser,

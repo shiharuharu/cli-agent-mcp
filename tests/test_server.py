@@ -16,7 +16,7 @@ import pytest
 from cli_agent_mcp.config import Config, load_config, reload_config, SUPPORTED_TOOLS
 
 # 导入 invokers 类型（用于验证参数构建逻辑）
-from invokers import (
+from cli_agent_mcp.shared.invokers import (
     CodexParams,
     GeminiParams,
     ClaudeParams,
@@ -29,7 +29,7 @@ class TestConfigIntegration:
 
     def test_tool_filtering_codex_only(self):
         """只允许 codex 时的过滤。"""
-        with mock.patch.dict(os.environ, {"CAM_TOOLS": "codex"}, clear=False):
+        with mock.patch.dict(os.environ, {"CAM_ENABLE": "codex"}, clear=False):
             config = reload_config()
             assert config.is_tool_allowed("codex")
             assert not config.is_tool_allowed("gemini")
@@ -37,7 +37,7 @@ class TestConfigIntegration:
 
     def test_tool_filtering_multiple(self):
         """允许多个工具时的过滤。"""
-        with mock.patch.dict(os.environ, {"CAM_TOOLS": "codex,claude"}, clear=False):
+        with mock.patch.dict(os.environ, {"CAM_ENABLE": "codex,claude"}, clear=False):
             config = reload_config()
             assert config.is_tool_allowed("codex")
             assert not config.is_tool_allowed("gemini")
@@ -45,12 +45,15 @@ class TestConfigIntegration:
 
     def test_all_tools_available_by_default(self):
         """默认所有工具可用。"""
-        env = {k: v for k, v in os.environ.items() if k != "CAM_TOOLS"}
+        env = {k: v for k, v in os.environ.items() if k not in ("CAM_ENABLE", "CAM_DISABLE")}
         with mock.patch.dict(os.environ, env, clear=True):
             config = reload_config()
             assert config.is_tool_allowed("codex")
             assert config.is_tool_allowed("gemini")
             assert config.is_tool_allowed("claude")
+            assert config.is_tool_allowed("opencode")
+            assert config.is_tool_allowed("banana")
+            assert config.is_tool_allowed("image")
 
 
 class TestParamsBuilding:
@@ -128,7 +131,7 @@ class TestToolSchemaLogic:
             "task_tags",
         ]
         # 验证 CommonParams 有这些属性
-        from invokers import CommonParams
+        from cli_agent_mcp.shared.invokers import CommonParams
         import dataclasses
 
         fields = {f.name for f in dataclasses.fields(CommonParams)}

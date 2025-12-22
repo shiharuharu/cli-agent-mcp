@@ -21,6 +21,9 @@ __all__ = [
     "RenderConfig",
 ]
 
+# 文件 URL 解析器类型
+FileUrlResolver = Any  # Callable[[str], str] | None
+
 
 @dataclass
 class RenderConfig:
@@ -48,9 +51,10 @@ class EventRenderer:
         html = renderer.render(event)
     """
 
-    def __init__(self, config: RenderConfig | None = None) -> None:
+    def __init__(self, config: RenderConfig | None = None, file_url_resolver: FileUrlResolver = None) -> None:
         self.config = config or RenderConfig()
         self._fold_id = 0
+        self._file_url_resolver = file_url_resolver
 
     def render(self, event: dict[str, Any]) -> str:
         """渲染单个事件为 HTML。
@@ -233,6 +237,17 @@ class EventRenderer:
             if output:
                 output_escaped = self._escape_and_truncate(output)
                 content_parts.append(f'<span class="dm">Output:</span> {output_escaped}')
+
+            # 渲染图片缩略图
+            metadata = event.get("metadata", {})
+            artifacts = metadata.get("artifacts", [])
+            if artifacts and self._file_url_resolver:
+                img_html = '<div class="img-grid">'
+                for path in artifacts:
+                    url = self._file_url_resolver(path)
+                    img_html += f'<img class="img-thumb" src="{url}" onclick="window.open(\'{url}\')">'
+                img_html += '</div>'
+                content_parts.append(img_html)
 
             fold_content = "<br>".join(content_parts)
             base_html += (

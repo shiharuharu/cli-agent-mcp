@@ -69,16 +69,8 @@ def _gui_process_entry(
     2. 监听 shutdown_event
     3. 如果启用心跳，检测主进程异常退出
     """
-    import sys
-    from pathlib import Path
-
-    # 添加 shared 路径
-    shared_path = Path(__file__).parent / "shared"
-    if shared_path.exists() and str(shared_path) not in sys.path:
-        sys.path.insert(0, str(shared_path))
-
     try:
-        from gui import LiveViewer, ViewerConfig
+        from cli_agent_mcp.shared.gui import LiveViewer, ViewerConfig
     except ImportError:
         logger.error("Failed to import GUI module")
         return
@@ -91,21 +83,15 @@ def _gui_process_entry(
     # 创建 viewer
     viewer = LiveViewer(ViewerConfig(title=title, multi_source_mode=True))
 
-    # 启动后传回 URL（在 viewer.start() 之前设置回调）
-    def send_url_on_start():
-        if viewer.url:
-            try:
-                url_queue.put_nowait(viewer.url)
-                logger.info(f"GUI URL: {viewer.url}")
-            except Exception:
-                pass
+    # URL 回调：HTTP server 启动后立即回传（不等 loaded 事件）
+    def send_url_callback(url: str):
+        try:
+            url_queue.put_nowait(url)
+            logger.info(f"GUI URL: {url}")
+        except Exception:
+            pass
 
-    # 注册启动回调
-    original_started_set = viewer._started.set
-    def started_set_with_url():
-        original_started_set()
-        send_url_on_start()
-    viewer._started.set = started_set_with_url
+    viewer._url_callback = send_url_callback
 
     # 状态
     should_exit = threading.Event()

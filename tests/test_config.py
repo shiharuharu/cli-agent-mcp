@@ -18,53 +18,52 @@ class TestParseTools:
 
     def test_empty_tools_means_all(self):
         """空工具列表表示全部可用。"""
-        with mock.patch.dict(os.environ, {"CAM_TOOLS": ""}, clear=False):
+        with mock.patch.dict(os.environ, {"CAM_ENABLE": ""}, clear=False):
             config = load_config()
             assert config.allowed_tools == SUPPORTED_TOOLS
 
     def test_unset_tools_means_all(self):
         """未设置工具列表表示全部可用。"""
-        env = {k: v for k, v in os.environ.items() if k != "CAM_TOOLS"}
+        env = {k: v for k, v in os.environ.items() if k not in ("CAM_ENABLE", "CAM_DISABLE")}
         with mock.patch.dict(os.environ, env, clear=True):
             config = load_config()
             assert config.allowed_tools == SUPPORTED_TOOLS
 
     def test_single_tool(self):
         """单个工具。"""
-        with mock.patch.dict(os.environ, {"CAM_TOOLS": "codex"}, clear=False):
+        with mock.patch.dict(os.environ, {"CAM_ENABLE": "codex"}, clear=False):
             config = load_config()
             assert config.allowed_tools == {"codex"}
 
     def test_multiple_tools(self):
         """多个工具，逗号分隔。"""
-        with mock.patch.dict(os.environ, {"CAM_TOOLS": "codex,gemini"}, clear=False):
+        with mock.patch.dict(os.environ, {"CAM_ENABLE": "codex,gemini"}, clear=False):
             config = load_config()
             assert config.allowed_tools == {"codex", "gemini"}
 
     def test_case_insensitive(self):
         """大小写不敏感。"""
-        with mock.patch.dict(os.environ, {"CAM_TOOLS": "CODEX,Gemini,CLAUDE"}, clear=False):
+        with mock.patch.dict(os.environ, {"CAM_ENABLE": "CODEX,Gemini,CLAUDE"}, clear=False):
             config = load_config()
             assert config.allowed_tools == {"codex", "gemini", "claude"}
 
     def test_whitespace_handling(self):
         """处理空格。"""
-        with mock.patch.dict(os.environ, {"CAM_TOOLS": " codex , gemini "}, clear=False):
+        with mock.patch.dict(os.environ, {"CAM_ENABLE": " codex , gemini "}, clear=False):
             config = load_config()
             assert config.allowed_tools == {"codex", "gemini"}
 
     def test_invalid_tools_ignored(self):
         """无效工具被忽略。"""
-        with mock.patch.dict(os.environ, {"CAM_TOOLS": "codex,invalid,gemini"}, clear=False):
+        with mock.patch.dict(os.environ, {"CAM_ENABLE": "codex,invalid,gemini"}, clear=False):
             config = load_config()
             assert config.allowed_tools == {"codex", "gemini"}
 
-    def test_all_invalid_means_empty(self):
-        """全部无效时返回空集合（表示全部可用）。"""
-        with mock.patch.dict(os.environ, {"CAM_TOOLS": "invalid1,invalid2"}, clear=False):
+    def test_all_invalid_means_all(self):
+        """全部无效时返回全部可用（因为 enable 解析为空）。"""
+        with mock.patch.dict(os.environ, {"CAM_ENABLE": "invalid1,invalid2"}, clear=False):
             config = load_config()
-            # 空集合表示全部可用
-            assert config.tools == set()
+            # 无效工具被忽略，enable 为空，所以全部可用
             assert config.allowed_tools == SUPPORTED_TOOLS
 
 
@@ -112,10 +111,13 @@ class TestConfigMethods:
 
     def test_is_tool_allowed_when_all(self):
         """全部工具可用时检查。"""
-        config = Config(tools=set())  # 空集合表示全部
+        config = Config(tools=SUPPORTED_TOOLS)  # 全部工具
         assert config.is_tool_allowed("codex") is True
         assert config.is_tool_allowed("gemini") is True
         assert config.is_tool_allowed("claude") is True
+        assert config.is_tool_allowed("opencode") is True
+        assert config.is_tool_allowed("banana") is True
+        assert config.is_tool_allowed("image") is True
 
     def test_is_tool_allowed_when_restricted(self):
         """限制工具时检查。"""
@@ -166,7 +168,7 @@ class TestFullConfig:
         with mock.patch.dict(
             os.environ,
             {
-                "CAM_TOOLS": "codex,claude",
+                "CAM_ENABLE": "codex,claude",
                 "CAM_GUI": "true",
                 "CAM_GUI_DETAIL": "true",
                 "CAM_DEBUG": "true",

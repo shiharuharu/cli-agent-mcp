@@ -11,11 +11,14 @@ from __future__ import annotations
 import http.server
 import json
 import logging
+import mimetypes
 import queue
+import secrets
 import socketserver
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable
 
 logger = logging.getLogger(__name__)
@@ -35,6 +38,11 @@ class ServerConfig:
     max_clients: int = 10  # 最大客户端数
 
 
+class ReusableTCPServer(socketserver.ThreadingTCPServer):
+    """支持端口复用的 TCP 服务器"""
+    allow_reuse_address = True
+
+
 class GUIServer:
     """HTTP 服务器，提供静态 HTML 和 SSE 事件流"""
 
@@ -46,6 +54,7 @@ class GUIServer:
         self._shutdown_callback: Callable[[], None] | None = None
         self._server: socketserver.TCPServer | None = None
         self._actual_port: int = 0
+        self._file_tokens: dict[str, str] = {}  # token -> file_path
 
     @property
     def port(self) -> int:
@@ -65,10 +74,9 @@ class GUIServer:
         """启动服务器，返回实际端口"""
         handler = self._create_handler()
 
-        self._server = socketserver.ThreadingTCPServer(
+        self._server = ReusableTCPServer(
             (self.config.host, self.config.port), handler
         )
-        self._server.allow_reuse_address = True
         self._server.daemon_threads = True  # SSE 线程不阻塞进程退出
         self._server.block_on_close = False  # stop() 不等待线程结束
 
@@ -105,6 +113,12 @@ class GUIServer:
         """当前连接的客户端数量"""
         with self._lock:
             return len(self._clients)
+
+    def register_file(self, file_path: str) -> str:
+        """注册文件并返回访问 URL"""
+        token = secrets.token_urlsafe(16)
+        self._file_tokens[token] = file_path
+        return f"/file/{token}"
 
     def _client_connected(self, client_q: queue.Queue) -> bool:
         """客户端连接，返回是否允许"""
@@ -150,8 +164,25 @@ class GUIServer:
                     self._serve_html()
                 elif self.path == '/sse':
                     self._serve_sse()
+                elif self.path.startswith('/file/'):
+                    self._serve_file()
                 else:
                     self.send_error(404)
+
+            def _serve_file(self):
+                token = self.path[6:]  # 去掉 "/file/" 前缀
+                file_path = server._file_tokens.get(token)
+                if not file_path or not Path(file_path).exists():
+                    self.send_error(404)
+                    return
+                content = Path(file_path).read_bytes()
+                mime_type = mimetypes.guess_type(file_path)[0] or 'application/octet-stream'
+                self.send_response(200)
+                self.send_header('Content-Type', mime_type)
+                self.send_header('Content-Length', len(content))
+                self.send_header('Cache-Control', 'max-age=3600')
+                self.end_headers()
+                self.wfile.write(content)
 
             def _serve_html(self):
                 content = server.html.encode('utf-8')

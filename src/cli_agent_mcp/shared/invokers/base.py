@@ -424,9 +424,9 @@ class CLIInvoker(ABC):
                 debug_info=debug_info,
             )
         finally:
-            # 清理上下文引用（但保留以便返回结果）
+            # 清理上下文引用，释放内存（防止 invoker 复用时滞留大缓冲区）
             logger.debug(f"{self.cli_name} execute() finally block")
-            pass
+            self._ctx = None
 
     async def stream(
         self, params: CommonParams

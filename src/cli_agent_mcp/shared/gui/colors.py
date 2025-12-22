@@ -58,5 +58,7 @@ SOURCE_COLORS = {
     "codex": "#10A37F",    # OpenAI 绿
     "claude": "#CC785C",   # Anthropic 棕橙
     "opencode": "#8B5CF6", # 紫罗兰色
+    "banana": "#FFD700",   # 金黄色（香蕉色）
+    "image": "#10B981",    # 翠绿色
     "unknown": "#6A6A6A",  # 灰色
 }
