@@ -111,8 +111,10 @@ body {{
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    max-width: 400px;
 }}
 .task-info:empty {{ display: none; }}
+.task-info[title] {{ cursor: help; }}
 .task-note {{
     font-size: 10px;
     color: {COLORS["fg_dim"]};
@@ -300,6 +302,8 @@ let eventCount = 0;
 let currentFilter = 'all';
 let sessions = {{}};  // session_id -> {{ source, count, taskNote }}
 let currentTask = '';  // 当前任务标题
+let currentTaskNotes = [];  // 累积的 task_notes（用于 parallel 模式）
+let taskNoteResetTimer = null;  // 重置计时器
 const content = document.getElementById('content');
 const sessionList = document.getElementById('session-list');
 
@@ -334,10 +338,28 @@ function addEvent(html, sessionId, source, taskNote) {{
         }}
     }}
 
-    // Update current task display
-    if (taskNote && taskNote !== currentTask) {{
-        currentTask = taskNote;
-        document.getElementById('current-task').textContent = taskNote;
+    // Update current task display (accumulate for parallel mode)
+    if (taskNote) {{
+        // 清除之前的重置计时器
+        if (taskNoteResetTimer) {{
+            clearTimeout(taskNoteResetTimer);
+        }}
+
+        // 如果是新的 taskNote，添加到列表
+        if (!currentTaskNotes.includes(taskNote)) {{
+            currentTaskNotes.push(taskNote);
+        }}
+
+        // 显示所有 taskNotes，用 + 连接
+        const displayText = currentTaskNotes.join(' + ');
+        const taskEl = document.getElementById('current-task');
+        taskEl.textContent = displayText;
+        taskEl.title = displayText;  // 完整内容作为 tooltip
+
+        // 5秒后重置（新一轮任务）
+        taskNoteResetTimer = setTimeout(() => {{
+            currentTaskNotes = [];
+        }}, 5000);
     }}
 
     // Auto scroll
@@ -475,8 +497,15 @@ function clearLog() {{
     content.innerHTML = '';
     eventCount = 0;
     sessions = {{}};
+    currentTaskNotes = [];
+    if (taskNoteResetTimer) {{
+        clearTimeout(taskNoteResetTimer);
+        taskNoteResetTimer = null;
+    }}
     document.getElementById('event-count').textContent = '0 events';
     document.getElementById('all-count').textContent = '0';
+    document.getElementById('current-task').textContent = '';
+    document.getElementById('current-task').title = '';
     sessionList.innerHTML = '';
 }}
 

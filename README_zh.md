@@ -481,20 +481,31 @@ export CAM_LOG_DEBUG=true
 
 ```
 cli-agent-mcp/
-├── shared/                  # 真相源（用于分发）
-│   ├── gui/
-│   ├── invokers/
-│   └── parsers/
-├── src/cli_agent_mcp/       # 主包
-│   ├── shared/              # ← 同步副本（勿直接编辑）
-│   ├── server.py
-│   ├── config.py
-│   └── gui_manager.py
-├── tests/
-└── shared_sync.sh
+├── src/cli_agent_mcp/
+│   ├── __init__.py          # 包导出
+│   ├── __main__.py          # 入口点
+│   ├── app.py               # 服务器生命周期 (run_server, main)
+│   ├── server.py            # MCP 协议适配器 (create_server)
+│   ├── tool_schema.py       # 工具描述和 JSON Schema
+│   ├── config.py            # 配置管理
+│   ├── gui_manager.py       # GUI 仪表盘管理器
+│   ├── orchestrator.py      # 请求注册表
+│   ├── signal_manager.py    # 信号处理 (SIGINT/SIGTERM)
+│   ├── handlers/            # 工具处理器
+│   │   ├── base.py          # ToolContext, ToolHandler 基类
+│   │   ├── cli.py           # CLI 工具 (codex/gemini/claude/opencode)
+│   │   ├── parallel.py      # 并行执行 (*_parallel 工具)
+│   │   └── image_tools.py   # 图片工具 (banana/image)
+│   ├── utils/               # 工具函数
+│   │   ├── xml_wrapper.py   # XML 转义和包装构建
+│   │   └── prompt_injection.py  # 提示词注入辅助
+│   └── shared/              # 共享模块
+│       ├── invokers/        # CLI 调用器实现
+│       ├── parsers/         # 输出解析器
+│       ├── gui/             # GUI 组件
+│       └── response_formatter.py  # 响应格式化
+└── tests/
 ```
-
-**重要**：永远不要直接编辑 `src/cli_agent_mcp/shared/`。始终编辑 `shared/` 然后运行同步脚本。
 
 ## 开发
 
@@ -504,9 +515,6 @@ pip install -e ".[dev]"
 
 # 运行测试
 pytest
-
-# 同步共享模块（先运行测试）
-./shared_sync.sh
 ```
 
 ## 许可证

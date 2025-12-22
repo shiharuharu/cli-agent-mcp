@@ -481,11 +481,29 @@ Add to your MCP client configuration (e.g., Claude Desktop `claude_desktop_confi
 
 ```
 cli-agent-mcp/
-├── src/cli_agent_mcp/       # Main package
-│   ├── shared/              # Shared modules (image, invokers, parsers, gui)
-│   ├── server.py
-│   ├── config.py
-│   └── gui_manager.py
+├── src/cli_agent_mcp/
+│   ├── __init__.py          # Package exports
+│   ├── __main__.py          # Entry point
+│   ├── app.py               # Server lifecycle (run_server, main)
+│   ├── server.py            # MCP protocol adapter (create_server)
+│   ├── tool_schema.py       # Tool descriptions and JSON schemas
+│   ├── config.py            # Configuration management
+│   ├── gui_manager.py       # GUI dashboard manager
+│   ├── orchestrator.py      # Request registry
+│   ├── signal_manager.py    # Signal handling (SIGINT/SIGTERM)
+│   ├── handlers/            # Tool handlers
+│   │   ├── base.py          # ToolContext, ToolHandler base class
+│   │   ├── cli.py           # CLI tools (codex/gemini/claude/opencode)
+│   │   ├── parallel.py      # Parallel execution (*_parallel tools)
+│   │   └── image_tools.py   # Image tools (banana/image)
+│   ├── utils/               # Utility functions
+│   │   ├── xml_wrapper.py   # XML escaping and wrapper building
+│   │   └── prompt_injection.py  # Prompt injection helpers
+│   └── shared/              # Shared modules
+│       ├── invokers/        # CLI invoker implementations
+│       ├── parsers/         # Output parsers
+│       ├── gui/             # GUI components
+│       └── response_formatter.py  # Response formatting
 └── tests/
 ```
 
