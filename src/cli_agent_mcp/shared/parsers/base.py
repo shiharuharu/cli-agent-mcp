@@ -33,14 +33,16 @@ VERSION: Final[str] = "0.1.0"
 class CLISource(str, Enum):
     """CLI 来源标识。
 
-    标识事件来自哪个 CLI 客户端。
-    设计为可扩展，新增 CLI 只需添加枚举值。
+    标识事件来自哪个 CLI 客户端或工具。
+    设计为可扩展，新增 CLI/工具只需添加枚举值。
     """
 
     GEMINI = "gemini"
     CODEX = "codex"
     CLAUDE = "claude"
     OPENCODE = "opencode"
+    BANANA = "banana"    # 图像生成工具
+    IMAGE = "image"      # 图像生成工具
     UNKNOWN = "unknown"
 
 

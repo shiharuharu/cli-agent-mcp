@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import html
 import logging
-import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -23,6 +22,7 @@ from ..image import (
     ImageResponse,
 )
 from ..parsers import CLISource, make_fallback_event
+from .utils import sanitize_task_note, escape_xml
 
 __all__ = ["ImageInvoker", "ImageParams", "ImageExecutionResult"]
 
@@ -198,14 +198,6 @@ class ImageInvoker:
 
         return result
 
-    def _sanitize_task_note(self, name: str) -> str:
-        """将 task_note 转换为安全的文件名前缀。"""
-        if not name:
-            return ""
-        sanitized = re.sub(r'[^\w\-]', '-', name)
-        sanitized = re.sub(r'-+', '-', sanitized)
-        return sanitized.strip('-')[:50]
-
     def _build_response_xml(self, response: ImageResponse) -> str:
         request_id = html.escape(response.request_id, quote=True)
         model = html.escape(response.model, quote=True)
@@ -245,7 +237,7 @@ class ImageInvoker:
         output_dir = params.save_path
 
         # 清理 task_note 用于文件名前缀
-        task_note = self._sanitize_task_note(params.task_note)
+        task_note = sanitize_task_note(params.task_note)
 
         request = ImageRequest(
             prompt=params.prompt,
@@ -298,14 +290,3 @@ class ImageInvoker:
             if self._client:
                 await self._client.close()
                 self._client = None
-
-
-def _escape_xml(text: str) -> str:
-    return (
-        text
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-        .replace("'", "&apos;")
-    )

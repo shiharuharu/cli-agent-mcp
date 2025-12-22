@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 import html
 import logging
-import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -28,6 +27,7 @@ from ..banana import (
     ImageSize,
 )
 from ..parsers import CLISource, EventCategory, make_fallback_event, UnifiedEvent
+from .utils import sanitize_task_note, escape_xml
 
 __all__ = ["BananaInvoker", "BananaParams"]
 
@@ -262,14 +262,6 @@ class BananaInvoker:
         lines.append('</nano-banana-response>')
         return '\n'.join(lines)
 
-    def _sanitize_task_note(self, name: str) -> str:
-        """将 task_note 转换为安全的文件名前缀。"""
-        if not name:
-            return ""
-        sanitized = re.sub(r'[^\w\-]', '-', name)
-        sanitized = re.sub(r'-+', '-', sanitized)
-        return sanitized.strip('-')[:50]
-
     async def execute(self, params: BananaParams) -> BananaExecutionResult:
         """执行图像生成。
 
@@ -292,7 +284,7 @@ class BananaInvoker:
         output_dir = params.save_path
 
         # 清理 task_note 用于文件名前缀
-        task_note = self._sanitize_task_note(params.task_note)
+        task_note = sanitize_task_note(params.task_note)
 
         # 解析宽高比
         try:
@@ -373,15 +365,3 @@ class BananaInvoker:
             if self._client:
                 await self._client.close()
                 self._client = None
-
-
-def _escape_xml(text: str) -> str:
-    """转义 XML 特殊字符。"""
-    return (
-        text
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-        .replace("'", "&apos;")
-    )

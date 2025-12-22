@@ -79,13 +79,10 @@ from .shared.invokers import (
     GeminiParams,
     OpencodeInvoker,
     OpencodeParams,
-    BananaInvoker,
-    BananaParams,
-    ImageInvoker,
-    ImageParams,
     Permission,
     create_invoker,
 )
+from .handlers import ToolContext, BananaHandler, ImageHandler
 
 __all__ = ["main", "create_server"]
 
@@ -718,16 +715,19 @@ def create_server(
         })
 
     # 创建调用器（带 GUI 回调）
-    def make_event_callback(cli_type: str, task_note: str = ""):
+    def make_event_callback(cli_type: str, task_note: str = "", task_index: int | None = None):
         def callback(event):
             if gui_manager and gui_manager.is_running:
                 # 转换 UnifiedEvent 为字典
                 event_dict = event.model_dump() if hasattr(event, "model_dump") else dict(event.__dict__)
                 event_dict["source"] = cli_type
-                # 注入 task_note 到 metadata
+                # 注入 task_note 和 task_index 到 metadata
+                metadata = event_dict.get("metadata", {}) or {}
                 if task_note:
-                    metadata = event_dict.get("metadata", {}) or {}
                     metadata["task_note"] = task_note
+                if task_index is not None:
+                    metadata["task_index"] = task_index
+                if metadata:
                     event_dict["metadata"] = metadata
                 gui_manager.push_event(event_dict)
         return callback
@@ -859,14 +859,26 @@ def create_server(
         else:
             logger.debug(f"No registry available")
 
-        try:
-            # Banana 工具使用独立的处理流程
-            if base_name == "banana":
-                return await _handle_banana_tool(arguments, push_user_prompt, push_to_gui, gui_manager, config)
+        # 创建工具上下文（供 handlers 使用）
+        tool_ctx = ToolContext(
+            config=config,
+            gui_manager=gui_manager,
+            registry=registry,
+            push_to_gui=push_to_gui,
+            push_user_prompt=push_user_prompt,
+            make_event_callback=make_event_callback,
+        )
 
-            # Image 工具使用独立的处理流程
+        try:
+            # Banana 工具使用 Handler
+            if base_name == "banana":
+                handler = BananaHandler()
+                return await handler.handle(arguments, tool_ctx)
+
+            # Image 工具使用 Handler
             if base_name == "image":
-                return await _handle_image_tool(arguments, push_user_prompt, push_to_gui, gui_manager, config)
+                handler = ImageHandler()
+                return await handler.handle(arguments, tool_ctx)
 
             # Parallel 模式使用独立的处理流程
             if is_parallel:
@@ -1012,215 +1024,6 @@ def create_server(
                 logger.debug(f"Unregistered request: {request_id[:8]}...")
 
     return server
-
-
-async def _handle_banana_tool(
-    arguments: dict[str, Any],
-    push_user_prompt: Any,
-    push_to_gui: Any,
-    gui_manager: Any,
-    config: Any,
-) -> list[TextContent]:
-    """处理 banana 工具调用。
-
-    Args:
-        arguments: 工具参数
-        push_user_prompt: 推送用户 prompt 的函数
-        push_to_gui: 推送事件到 GUI 的函数
-        gui_manager: GUI 管理器
-        config: 配置对象
-
-    Returns:
-        TextContent 列表
-    """
-    prompt = arguments.get("prompt", "")
-    task_note = arguments.get("task_note", "")
-
-    # 推送用户 prompt 到 GUI
-    push_user_prompt("banana", prompt, task_note)
-
-    # 创建事件回调
-    def event_callback(event):
-        if gui_manager and gui_manager.is_running:
-            event_dict = event.model_dump() if hasattr(event, "model_dump") else dict(event.__dict__)
-            event_dict["source"] = "banana"
-            gui_manager.push_event(event_dict)
-
-    # 创建 invoker 并执行
-    invoker = BananaInvoker(event_callback=event_callback)
-
-    params = BananaParams(
-        prompt=prompt,
-        images=arguments.get("images", []),
-        aspect_ratio=arguments.get("aspect_ratio", "1:1"),
-        resolution=arguments.get("resolution", "4K"),
-        use_search=arguments.get("use_search", False),
-        include_thoughts=arguments.get("include_thoughts", False),
-        temperature=arguments.get("temperature", 1.0),
-        top_p=arguments.get("top_p", 0.95),
-        top_k=arguments.get("top_k", 40),
-        num_images=arguments.get("num_images", 1),
-        save_path=arguments.get("save_path", ""),
-        task_note=task_note,
-    )
-
-    try:
-        result = await invoker.execute(params)
-
-        if result.success:
-            # 返回 XML 响应
-            response = result.response_xml
-
-            # 添加 debug_info（仅当 debug 开启时）
-            debug_enabled = _resolve_debug(arguments, config)
-            if debug_enabled and result.artifacts:
-                response += (
-                    f"\n<debug_info>"
-                    f"\n  <image_count>{len(result.artifacts)}</image_count>"
-                    f"\n  <duration_sec>{result.duration_sec:.3f}</duration_sec>"
-                    f"\n  <model>{result.model}</model>"
-                    f"\n  <api_endpoint>{result.api_endpoint}</api_endpoint>"
-                    f"\n  <auth_token>{result.auth_token_masked}</auth_token>"
-                    f"\n</debug_info>"
-                )
-
-            # 推送结果到 GUI
-            gui_metadata: dict[str, Any] = {
-                "artifacts": result.artifacts,
-                "task_note": task_note,
-            }
-            if debug_enabled:
-                gui_metadata["debug"] = {
-                    "image_count": len(result.artifacts),
-                    "duration_sec": result.duration_sec,
-                    "model": result.model,
-                    "api_endpoint": result.api_endpoint,
-                    "auth_token": result.auth_token_masked,
-                }
-            push_to_gui({
-                "category": "operation",
-                "operation_type": "tool_call",
-                "source": "banana",
-                "session_id": f"banana_{result.request_id}",
-                "name": "banana",
-                "status": "success",
-                "output": response,
-                "metadata": gui_metadata,
-            })
-
-            return [TextContent(type="text", text=response)]
-        else:
-            return _format_error_response(result.error or "Unknown error")
-
-    except asyncio.CancelledError:
-        # 取消错误必须 re-raise，不能被吞掉
-        raise
-
-    except Exception as e:
-        logger.exception(f"Banana tool error: {e}")
-        return _format_error_response(str(e))
-
-
-async def _handle_image_tool(
-    arguments: dict[str, Any],
-    push_user_prompt: Any,
-    push_to_gui: Any,
-    gui_manager: Any,
-    config: Any,
-) -> list[TextContent]:
-    """处理 image 工具调用。
-
-    Args:
-        arguments: 工具参数
-        push_user_prompt: 推送用户 prompt 的函数
-        push_to_gui: 推送事件到 GUI 的函数
-        gui_manager: GUI 管理器
-        config: 配置对象
-
-    Returns:
-        TextContent 列表
-    """
-    prompt = arguments.get("prompt", "")
-    task_note = arguments.get("task_note", "")
-
-    # 推送用户 prompt 到 GUI
-    push_user_prompt("image", prompt, task_note)
-
-    # 创建事件回调
-    def event_callback(event):
-        if gui_manager and gui_manager.is_running:
-            event_dict = event.model_dump() if hasattr(event, "model_dump") else dict(event.__dict__)
-            event_dict["source"] = "image"
-            gui_manager.push_event(event_dict)
-
-    # 创建 invoker 并执行
-    invoker = ImageInvoker(event_callback=event_callback)
-
-    params = ImageParams(
-        prompt=prompt,
-        model=arguments.get("model", ""),
-        images=arguments.get("images", []),
-        save_path=arguments.get("save_path", ""),
-        task_note=task_note,
-        aspect_ratio=arguments.get("aspect_ratio", "1:1"),
-        resolution=arguments.get("resolution", "1K"),
-        quality=arguments.get("quality", "standard"),
-        api_type=arguments.get("api_type", ""),
-    )
-
-    try:
-        result = await invoker.execute(params)
-
-        if result.success:
-            # 返回 XML 响应
-            response = result.response_xml
-
-            # 添加 debug_info（仅当 debug 开启时）
-            debug_enabled = _resolve_debug(arguments, config)
-            if debug_enabled:
-                response += (
-                    f"\n<debug_info>"
-                    f"\n  <image_count>{len(result.artifacts) if result.artifacts else 0}</image_count>"
-                    f"\n  <duration_sec>{result.duration_sec:.3f}</duration_sec>"
-                    f"\n  <model>{params.model or 'env:IMAGE_MODEL'}</model>"
-                    f"\n  <api_type>{params.api_type or 'env:IMAGE_API_TYPE'}</api_type>"
-                    f"\n</debug_info>"
-                )
-
-            # 推送结果到 GUI
-            gui_metadata: dict[str, Any] = {
-                "artifacts": result.artifacts,
-                "task_note": task_note,
-            }
-            if debug_enabled:
-                gui_metadata["debug"] = {
-                    "image_count": len(result.artifacts) if result.artifacts else 0,
-                    "duration_sec": result.duration_sec,
-                    "model": params.model or "env:IMAGE_MODEL",
-                    "api_type": params.api_type or "env:IMAGE_API_TYPE",
-                }
-            push_to_gui({
-                "category": "operation",
-                "operation_type": "tool_call",
-                "source": "image",
-                "session_id": f"image_{result.request_id}",
-                "name": "image",
-                "status": "success",
-                "output": response,
-                "metadata": gui_metadata,
-            })
-
-            return [TextContent(type="text", text=response)]
-        else:
-            return _format_error_response(result.error or "Unknown error")
-
-    except asyncio.CancelledError:
-        # 取消错误必须 re-raise，不能被吞掉
-        raise
-
-    except Exception as e:
-        logger.exception(f"Image tool error: {e}")
-        return _format_error_response(str(e))
 
 
 def xml_escape_attr(s: str | None) -> str:
@@ -1414,9 +1217,10 @@ async def _handle_parallel_call(
                 return (sub_args["_task_index"], sub_args["task_note"], None)  # skipped
 
             try:
-                # 创建 invoker（传入 task_note 用于 GUI 显示）
+                # 创建 invoker（传入 task_note 和 task_index 用于 GUI 显示）
                 task_note = sub_args.get("task_note", "")
-                event_callback = make_event_callback(base_name, task_note) if gui_manager else None
+                task_index = sub_args.get("_task_index")
+                event_callback = make_event_callback(base_name, task_note, task_index) if gui_manager else None
                 invoker = create_invoker(base_name, event_callback=event_callback)
 
                 # 构建参数
