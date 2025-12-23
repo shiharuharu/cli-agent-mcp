@@ -61,8 +61,7 @@ CAPABILITIES:
 - Best for full-text analysis and detective work
 
 BEST PRACTICES:
-- Enable verbose_output when doing research or analysis
-- Good first choice for "understand this codebase" tasks""",
+- Good first choice for \"understand this codebase\" tasks\"\"\",
 
     "claude": """Run Anthropic Claude CLI agent (code implementation).
 
@@ -219,11 +218,6 @@ COMMON_PROPERTIES = {
             "When true AND save_file is set, append instead of overwrite. "
             "For multi-agent collaboration on same document."
         ),
-    },
-    "verbose_output": {
-        "type": "boolean",
-        "default": False,
-        "description": "Include internal reasoning/tool traces in response. Useful for debugging.",
     },
     "report_mode": {
         "type": "boolean",
@@ -498,7 +492,7 @@ def create_tool_schema(cli_type: str, is_parallel: bool = False) -> dict[str, An
 
     参数顺序：
     1. prompt, workspace (必填) - parallel 模式下 prompt 被忽略
-    2. continuation_id, permission, model, save_file, verbose_output (常用)
+    2. continuation_id, permission, model, save_file (常用)
     3. 特有参数 (image / system_prompt / append_system_prompt / file / agent / images)
     4. parallel 参数 (仅 parallel 模式)
     5. task_note, debug (末尾)

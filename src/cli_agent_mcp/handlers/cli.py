@@ -45,7 +45,6 @@ def build_params(cli_type: str, args: dict[str, Any]):
         "permission": Permission(args.get("permission", "read-only")),
         "session_id": args.get("continuation_id", ""),  # 外部 continuation_id → 内部 session_id
         "model": args.get("model", ""),
-        "verbose_output": args.get("verbose_output", False),
         "task_note": args.get("task_note", ""),
         "task_tags": args.get("task_tags", []),
     }
@@ -142,7 +141,6 @@ class CLIHandler(ToolHandler):
             result = await invoker.execute(params)
 
             # 获取参数
-            verbose_output = arguments.get("verbose_output", False)
             debug_enabled = ctx.resolve_debug(arguments)
             save_file_path = arguments.get("save_file", "")
 
@@ -165,7 +163,7 @@ class CLIHandler(ToolHandler):
             response_data = ResponseData(
                 answer=result.agent_messages,  # 即使失败也返回已收集的内容
                 session_id=result.session_id or "",
-                thought_steps=result.thought_steps if (verbose_output or not result.success) else [],
+                thought_steps=result.thought_steps if not result.success else [],
                 debug_info=debug_info,
                 success=result.success,
                 error=result.error,
@@ -175,7 +173,6 @@ class CLIHandler(ToolHandler):
             formatter = get_formatter()
             response = formatter.format(
                 response_data,
-                verbose_output=verbose_output,
                 debug=debug_enabled,
             )
 
@@ -194,10 +191,7 @@ class CLIHandler(ToolHandler):
             # 这是一个便捷功能，让编排器无需单独写文件来保存分析结果。
             if save_file_path and result.success:
                 try:
-                    file_content = formatter.format_for_file(
-                        response_data,
-                        verbose_output=verbose_output,
-                    )
+                    file_content = formatter.format_for_file(response_data)
 
                     # 添加 XML wrapper（如果启用）
                     if arguments.get("save_file_with_wrapper", False):

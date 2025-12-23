@@ -81,7 +81,6 @@ class CommonParams:
         permission: 读写权限
         session_id: 恢复指定会话
         model: 模型选择
-        verbose_output: 返回完整过程信息
         task_note: 任务备注，用于 GUI 显示
         task_tags: 任务标签列表
     """
@@ -91,7 +90,6 @@ class CommonParams:
     permission: Permission = Permission.READ_ONLY
     session_id: str = ""
     model: str = ""
-    verbose_output: bool = False
     task_note: str = ""
     task_tags: list[str] = field(default_factory=list)
 
@@ -251,7 +249,6 @@ class ExecutionResult:
         agent_messages: 最终答案（最后一条 agent 回复）
         thought_steps: 中间思考步骤（除最后一条外的 agent 消息）
         error: 错误信息（仅失败时）
-        all_messages: 完整消息列表（仅 verbose_output=True）
         log_file: 日志文件路径
         gui_metadata: GUI 元数据
         debug_info: 调试信息（仅 debug=True）
@@ -263,7 +260,6 @@ class ExecutionResult:
     agent_messages: str = ""  # 最终答案
     thought_steps: list[str] = field(default_factory=list)  # 中间消息
     error: str | None = None
-    all_messages: list[dict[str, Any]] | None = None
     log_file: str | None = None
     gui_metadata: GUIMetadata | None = None
     debug_info: DebugInfo | None = None

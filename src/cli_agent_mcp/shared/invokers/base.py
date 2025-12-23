@@ -360,7 +360,6 @@ class CLIInvoker(ABC):
                 agent_messages=self._ctx.final_answer,  # 最终答案（最后一条）
                 thought_steps=self._ctx.agent_messages,  # 中间消息（除最后一条外）
                 error=self._ctx.exit_error,  # 退出错误信息
-                all_messages=self._ctx.collected_messages if params.verbose_output else None,
                 gui_metadata=GUIMetadata(
                     task_note=params.task_note,
                     task_tags=params.task_tags,

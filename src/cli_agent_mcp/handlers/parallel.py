@@ -138,7 +138,6 @@ class ParallelHandler(ToolHandler):
                 "workspace": arguments.get("workspace"),
                 "permission": arguments.get("permission", "read-only"),
                 "model": arguments.get("model", ""),
-                "verbose_output": arguments.get("verbose_output", False),
                 "task_note": note,
                 "_task_index": idx,
                 # CLI 特有参数
@@ -214,7 +213,6 @@ class ParallelHandler(ToolHandler):
         all_wrapped = []  # 收集所有 wrapped 内容用于返回
 
         formatter = get_formatter()
-        verbose_output = arguments.get("verbose_output", False)
 
         for idx, note, result in results:
             if result is None:
@@ -233,12 +231,12 @@ class ParallelHandler(ToolHandler):
                 response_data = ResponseData(
                     answer=result.agent_messages,
                     session_id=result.session_id or "",
-                    thought_steps=result.thought_steps if verbose_output else [],
+                    thought_steps=[],
                     debug_info=None,
                     success=True,
                     error=None,
                 )
-                content = formatter.format_for_file(response_data, verbose_output=verbose_output)
+                content = formatter.format_for_file(response_data)
                 status = "success"
                 session_id = result.session_id or ""
                 success_count += 1
@@ -323,6 +321,6 @@ class ParallelHandler(ToolHandler):
             success=not has_failures,
             error=f"{failed_count} of {len(results)} tasks failed" if has_failures else None,
         )
-        formatted_response = formatter.format(response_data, verbose_output=False, debug=debug_enabled)
+        formatted_response = formatter.format(response_data, debug=debug_enabled)
 
         return [TextContent(type="text", text=formatted_response)]

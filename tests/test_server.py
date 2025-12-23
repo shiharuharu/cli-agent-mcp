@@ -126,7 +126,6 @@ class TestToolSchemaLogic:
             "permission",
             "session_id",
             "model",
-            "verbose_output",
             "task_note",
             "task_tags",
         ]
