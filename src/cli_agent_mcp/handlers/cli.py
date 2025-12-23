@@ -210,6 +210,7 @@ class CLIHandler(ToolHandler):
 
                     # 追加或覆盖
                     file_path = Path(save_file_path)
+                    file_path.parent.mkdir(parents=True, exist_ok=True)
                     if arguments.get("save_file_with_append_mode", False) and file_path.exists():
                         with file_path.open("a", encoding="utf-8") as f:
                             f.write("\n" + file_content)

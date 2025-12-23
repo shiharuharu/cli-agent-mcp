@@ -31,11 +31,14 @@ from .types import (
 __all__ = ["GeminiInvoker"]
 
 # Gemini 只读工具列表
+# 注意：run_shell_command 在 --sandbox 模式下本身就是受限的，
+# 很多只读操作（如 git log, ls, cat）需要 shell 命令
 GEMINI_READ_ONLY_TOOLS = [
     "glob",
     "read_file",
     "list_directory",
     "search_file_content",
+    "run_shell_command",
 ]
 
 # Gemini 完整工具列表（包含写操作）
@@ -43,7 +46,6 @@ GEMINI_ALL_TOOLS = [
     *GEMINI_READ_ONLY_TOOLS,
     "replace",
     "write_file",
-    "run_shell_command",
     "write_todos",
 ]
 
