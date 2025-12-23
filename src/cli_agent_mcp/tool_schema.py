@@ -61,7 +61,7 @@ CAPABILITIES:
 - Best for full-text analysis and detective work
 
 BEST PRACTICES:
-- Good first choice for \"understand this codebase\" tasks\"\"\",
+- Good first choice for "understand this codebase" tasks""",
 
     "claude": """Run Anthropic Claude CLI agent (code implementation).
 
