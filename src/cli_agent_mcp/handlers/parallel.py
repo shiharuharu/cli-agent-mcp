@@ -272,6 +272,7 @@ class ParallelHandler(ToolHandler):
         if all_wrapped:
             try:
                 file_path = Path(save_file)
+                file_path.parent.mkdir(parents=True, exist_ok=True)
                 content_to_write = "\n".join(all_wrapped)
                 if file_path.exists():
                     with file_path.open("a", encoding="utf-8") as f:
