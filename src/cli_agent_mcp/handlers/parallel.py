@@ -93,6 +93,11 @@ class ParallelHandler(ToolHandler):
         if arguments.get("continuation_id"):
             return "continuation_id input is not supported in parallel mode"
 
+        # model 数组校验
+        models = arguments.get("model", [])
+        if isinstance(models, list) and len(models) > 1 and len(models) != len(prompts):
+            return f"model array length ({len(models)}) must be 1 or match parallel_prompts length ({len(prompts)})"
+
         if not arguments.get("save_file"):
             return "save_file is required in parallel mode"
 
@@ -129,15 +134,25 @@ class ParallelHandler(ToolHandler):
         sub_tasks = []
         context_paths = arguments.get("context_paths", [])
         report_mode = arguments.get("report_mode", False)
+        models = arguments.get("model", [])
+        if not isinstance(models, list):
+            models = [models] if models else []
 
         for idx, (prompt, note) in enumerate(zip(prompts, task_notes), start=1):
             # 注入 context_paths 和 report_mode
             final_prompt = inject_context_and_report_mode(prompt, context_paths, report_mode)
+            # model 分发：单个则共享，多个则按索引分配
+            if len(models) == 1:
+                model = models[0]
+            elif len(models) >= idx:
+                model = models[idx - 1]
+            else:
+                model = ""
             sub_tasks.append({
                 "prompt": final_prompt,
                 "workspace": arguments.get("workspace"),
                 "permission": arguments.get("permission", "read-only"),
-                "model": arguments.get("model", ""),
+                "model": model,
                 "task_note": note,
                 "_task_index": idx,
                 # CLI 特有参数

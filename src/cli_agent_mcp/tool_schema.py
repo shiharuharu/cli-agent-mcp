@@ -555,12 +555,23 @@ def create_tool_schema(cli_type: str, is_parallel: bool = False) -> dict[str, An
     properties = {}
 
     # 1. 公共参数（必填 + 常用）
-    # parallel 模式下排除 prompt, continuation_id, save_file_with_append_mode, save_file_with_wrapper
+    # parallel 模式下排除 prompt, continuation_id, save_file_with_append_mode, save_file_with_wrapper, model
     if is_parallel:
         for key, value in COMMON_PROPERTIES.items():
-            if key in ("prompt", "continuation_id", "save_file_with_append_mode", "save_file_with_wrapper"):
+            if key in ("prompt", "continuation_id", "save_file_with_append_mode", "save_file_with_wrapper", "model"):
                 continue
             properties[key] = value
+        # parallel 模式下 model 改为数组类型
+        properties["model"] = {
+            "type": "array",
+            "items": {"type": "string"},
+            "default": [],
+            "description": (
+                "Model override(s). If single element, all tasks use that model. "
+                "If multiple elements, must match parallel_prompts length - each task uses corresponding model. "
+                "Empty array uses CLI default."
+            ),
+        }
     else:
         properties.update(COMMON_PROPERTIES)
 
