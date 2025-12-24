@@ -357,8 +357,8 @@ class CLIInvoker(ABC):
             result = ExecutionResult(
                 success=success,
                 session_id=self._ctx.session_id,
-                agent_messages=self._ctx.final_answer,  # 最终答案（最后一条）
-                thought_steps=self._ctx.agent_messages,  # 中间消息（除最后一条外）
+                agent_messages=self._ctx.final_answer.strip(),  # 最终答案（最后一条）
+                thought_steps=[s.strip() for s in self._ctx.agent_messages],  # 中间消息（除最后一条外）
                 error=self._ctx.exit_error,  # 退出错误信息
                 gui_metadata=GUIMetadata(
                     task_note=params.task_note,
