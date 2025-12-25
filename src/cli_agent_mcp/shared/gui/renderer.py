@@ -333,7 +333,7 @@ class EventRenderer:
 
     def _escape_and_truncate(self, text: str) -> str:
         """HTML 转义并截断。"""
-        text = str(text)
+        text = str(text).strip()
         # 行数截断
         lines = text.split("\n")
         if len(lines) > self.config.max_output_lines:
