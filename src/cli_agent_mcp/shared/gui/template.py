@@ -499,17 +499,6 @@ function copyText(text) {{
     navigator.clipboard.writeText(text);
 }}
 
-// Copy session ID (called when clicking .ss element)
-function copySessionId(el) {{
-    const sessionId = el.dataset.sessionId || el.textContent.replace('#', '');
-    navigator.clipboard.writeText(sessionId).then(() => {{
-        // 视觉反馈
-        const original = el.textContent;
-        el.textContent = '✓ copied';
-        setTimeout(() => {{ el.textContent = original; }}, 800);
-    }});
-}}
-
 // Clear log
 function clearLog() {{
     content.innerHTML = '';

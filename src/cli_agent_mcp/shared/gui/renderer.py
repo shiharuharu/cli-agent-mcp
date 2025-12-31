@@ -145,7 +145,7 @@ class EventRenderer:
             return (
                 f'<div class="e" data-session="{session_id_val}">'
                 f'{prefix} <span class="lb">[SESSION]</span> '
-                f'<span class="ss" onclick="copyText(\'{session_id_val}\')">{session_id_val}</span>{model_info}'
+                f'<span class="ss" onclick="filterBySession(\'{session_id_val}\')">{session_id_val}</span>{model_info}'
                 f'</div>'
             )
         elif lifecycle_type == "session_end":
