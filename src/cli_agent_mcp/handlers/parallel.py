@@ -120,10 +120,10 @@ class ParallelHandler(ToolHandler):
 
         # clamp concurrency (handle string/invalid types)
         try:
-            max_conc = int(arguments.get("parallel_max_concurrency", 4))
+            max_conc = int(arguments.get("parallel_max_concurrency", 20))
         except (TypeError, ValueError):
-            max_conc = 4
-        max_conc = max(1, min(16, max_conc))
+            max_conc = 20
+        max_conc = max(1, min(20, max_conc))
         fail_fast = arguments.get("parallel_fail_fast", False)
 
         # 推送用户 prompt 到 GUI（每个 prompt 单独推送）
