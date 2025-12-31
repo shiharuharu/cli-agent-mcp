@@ -117,7 +117,8 @@ def create_server(
                         f"Run multiple {cli_type} tasks in parallel. "
                         f"All tasks share workspace/permission/save_file. "
                         f"Results are appended to save_file with XML wrappers "
-                        f"(<agent-output agent=... continuation_id=... task_note=... task_index=... status=...>)."
+                        f"(<agent-output agent=... continuation_id=... task_note=... task_index=... status=...>). "
+                        f"Max 100 tasks. Model can be array: single element shared by all, or one per task."
                     )
                     tools.append(
                         Tool(
