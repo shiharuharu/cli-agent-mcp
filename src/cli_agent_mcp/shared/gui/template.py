@@ -438,6 +438,21 @@ function filterBySession(sessionId) {{
         el.classList.toggle('active', el.dataset.filter === sessionId);
     }});
 
+    // Update top task note display
+    const taskEl = document.getElementById('current-task');
+    if (sessionId === 'all') {{
+        // Show accumulated task notes
+        const displayText = currentTaskNotes.join(' + ');
+        taskEl.textContent = displayText;
+        taskEl.title = displayText;
+    }} else {{
+        // Show selected session's task note
+        const info = sessions[sessionId];
+        const note = info ? info.taskNote : '';
+        taskEl.textContent = note;
+        taskEl.title = note;
+    }}
+
     applyFilter();
 }}
 
