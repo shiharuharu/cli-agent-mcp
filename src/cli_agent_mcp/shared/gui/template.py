@@ -300,7 +300,7 @@ const MULTI_SOURCE_MODE = {'true' if multi_source_mode else 'false'};
 let autoScroll = true;
 let eventCount = 0;
 let currentFilter = 'all';
-let sessions = {{}};  // session_id -> {{ source, count, taskNote }}
+let sessions = {{}};  // session_id -> {{ source, count, taskNote, createdAt }}
 let currentTask = '';  // 当前任务标题
 let currentTaskNotes = [];  // 累积的 task_notes（用于 parallel 模式）
 let taskNoteResetTimer = null;  // 重置计时器
@@ -324,7 +324,7 @@ function addEvent(html, sessionId, source, taskNote) {{
     // Update session list
     if (sessionId) {{
         if (!sessions[sessionId]) {{
-            sessions[sessionId] = {{ source: source || 'unknown', count: 1, taskNote: taskNote || '' }};
+            sessions[sessionId] = {{ source: source || 'unknown', count: 1, taskNote: taskNote || '', createdAt: Date.now() }};
             updateSessionList();
         }} else {{
             sessions[sessionId].count++;
@@ -371,12 +371,15 @@ function addEvent(html, sessionId, source, taskNote) {{
     applyFilter();
 }}
 
-// Update session list in sidebar
+// Update session list in sidebar (sorted by createdAt descending)
 function updateSessionList() {{
+    // Sort sessions by createdAt descending (newest first)
+    const sortedSessions = Object.entries(sessions).sort((a, b) => b[1].createdAt - a[1].createdAt);
+
     if (MULTI_SOURCE_MODE) {{
         // Group by source
         const bySource = {{}};
-        for (const [sid, info] of Object.entries(sessions)) {{
+        for (const [sid, info] of sortedSessions) {{
             const src = info.source || 'unknown';
             if (!bySource[src]) bySource[src] = [];
             bySource[src].push(sid);
@@ -401,9 +404,9 @@ function updateSessionList() {{
         }}
         sessionList.innerHTML = html;
     }} else {{
-        // Simple list
+        // Simple list (already sorted)
         let html = '';
-        for (const [sid, info] of Object.entries(sessions)) {{
+        for (const [sid, info] of sortedSessions) {{
             const shortId = sid.length > 8 ? '#' + sid.slice(-8) : '#' + sid;
             const noteHtml = info.taskNote ? `<div class="task-note" title="${{info.taskNote}}">${{info.taskNote}}</div>` : '';
             html += `<div class="sidebar-item" data-filter="${{sid}}" onclick="filterBySession('${{sid}}')">
