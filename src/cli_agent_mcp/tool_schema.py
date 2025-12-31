@@ -469,7 +469,7 @@ PARALLEL_PROPERTIES = {
         "type": "integer",
         "default": 20,
         "minimum": 1,
-        "maximum": 20,
+        "maximum": 100,
         "description": "Max concurrent subprocesses.",
     },
     "parallel_fail_fast": {
