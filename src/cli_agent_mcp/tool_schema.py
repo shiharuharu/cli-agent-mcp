@@ -454,14 +454,14 @@ PARALLEL_PROPERTIES = {
     "parallel_prompts": {
         "type": "array",
         "minItems": 1,
-        "maxItems": 20,
+        "maxItems": 100,
         "description": "Complete prompts for parallel execution. Each spawns an independent subprocess.",
         "items": {"type": "string", "minLength": 1},
     },
     "parallel_task_notes": {
         "type": "array",
         "minItems": 1,
-        "maxItems": 20,
+        "maxItems": 100,
         "description": "Labels for each task. Length MUST equal parallel_prompts.",
         "items": {"type": "string", "minLength": 1, "maxLength": 120},
     },

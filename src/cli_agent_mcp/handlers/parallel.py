@@ -87,8 +87,8 @@ class ParallelHandler(ToolHandler):
         if len(prompts) != len(task_notes):
             return "parallel_prompts and parallel_task_notes must have same length"
 
-        if len(prompts) > 20:
-            return "parallel_prompts exceeds maximum of 20"
+        if len(prompts) > 100:
+            return "parallel_prompts exceeds maximum of 100"
 
         if arguments.get("continuation_id"):
             return "continuation_id input is not supported in parallel mode"
