@@ -176,10 +176,10 @@ class EventRenderer:
         """渲染消息事件。"""
         role = event.get("role", "")
         content_type = event.get("content_type", "text")
-        text = self._escape_and_truncate(event.get("text", ""))
         session_id = self._extract_session_id(event)
 
         if content_type == "reasoning":
+            text = self._escape_and_truncate(event.get("text", ""))
             return (
                 f'<div class="e" data-session="{session_id}">'
                 f'{prefix} <span class="lb">[REASONING]</span> '
@@ -187,13 +187,15 @@ class EventRenderer:
                 f'</div>'
             )
         elif role == "user":
+            text = self._escape_and_truncate(event.get("text", ""))
             return (
                 f'<div class="e" data-session="{session_id}">'
                 f'{prefix} <span class="lb">[USER]</span> '
                 f'<span class="usr">{text}</span>'
                 f'</div>'
             )
-        else:  # assistant
+        else:  # assistant - 不截断，完整输出
+            text = self._esc(event.get("text", "")).replace("\n", "<br>")
             return (
                 f'<div class="e" data-session="{session_id}">'
                 f'{prefix} <span class="lb">[ASSISTANT]</span> '
