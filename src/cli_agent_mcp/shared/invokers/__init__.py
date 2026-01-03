@@ -39,7 +39,7 @@ from __future__ import annotations
 
 __version__ = "0.1.0"
 
-from .base import CLIInvoker, EventCallback, ExecutionContext
+from .base import CLIInvoker, EventCallback, ExecutionContext, FirstEventTimeoutError
 from .claude import ClaudeInvoker
 from .codex import CodexInvoker
 from .gemini import GeminiInvoker
@@ -86,6 +86,7 @@ __all__ = [
     "CLIInvoker",
     "EventCallback",
     "ExecutionContext",
+    "FirstEventTimeoutError",
     # 调用器
     "CodexInvoker",
     "GeminiInvoker",

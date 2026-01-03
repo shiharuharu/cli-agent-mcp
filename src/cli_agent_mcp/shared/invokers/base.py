@@ -45,7 +45,23 @@ __all__ = [
     "CLIInvoker",
     "EventCallback",
     "ExecutionContext",
+    "FirstEventTimeoutError",
 ]
+
+
+class FirstEventTimeoutError(Exception):
+    """首次事件超时异常。
+
+    当进程启动后超过指定时间没有收到第一个 stdout 事件时抛出。
+    这通常意味着 CLI 进程卡住或死掉了。
+    """
+
+    def __init__(self, timeout: float, cli_name: str):
+        self.timeout = timeout
+        self.cli_name = cli_name
+        super().__init__(
+            f"{cli_name} process did not respond within {timeout:.0f}s"
+        )
 
 # 类型别名：事件回调函数
 EventCallback = Callable[["UnifiedEvent"], None]
@@ -152,6 +168,13 @@ class CLIInvoker(ABC):
     # 致命错误重复阈值 - 同一错误出现超过此次数时终止
     # 用于检测 CLI 进入重试死循环的情况
     _FATAL_ERROR_REPEAT_THRESHOLD: int = 3
+
+    # 首次事件超时（秒）- 进程启动后等待第一个 stdout 事件的最大时间
+    # 超过此时间没有收到任何输出，认为进程死掉了
+    _FIRST_EVENT_TIMEOUT: float = 120.0
+
+    # 首次事件超时最大重试次数
+    _FIRST_EVENT_TIMEOUT_MAX_RETRIES: int = 3
 
     def __init__(
         self,
@@ -309,6 +332,12 @@ class CLIInvoker(ABC):
 
         重要：每次调用都会创建新的 ExecutionContext，确保请求间状态隔离。
 
+        首次事件超时重试机制：
+        - 如果进程启动后超过 _FIRST_EVENT_TIMEOUT 秒没有收到第一个事件，自动重试
+        - 最多重试 _FIRST_EVENT_TIMEOUT_MAX_RETRIES 次
+        - 重试时向 GUI 发送通知
+        - 全部失败后返回友好错误信息
+
         Args:
             params: 调用参数
 
@@ -317,13 +346,9 @@ class CLIInvoker(ABC):
         """
         start_time = time.time()
 
-        # 核心变更：每次执行创建新的上下文，确保请求间状态隔离
-        self._ctx = ExecutionContext()
-
         try:
             self.validate_params(params)
         except ValueError as e:
-            self._ctx = None  # 清理上下文
             return ExecutionResult(
                 success=False,
                 error=str(e),
@@ -339,93 +364,163 @@ class CLIInvoker(ABC):
         cmd = self.build_command(params)
         logger.info(f"Executing: {' '.join(cmd)}")
 
-        try:
-            # 收集所有事件
-            async for event in self._run_process(cmd, params):
-                # 回调通知
-                if self._event_callback:
-                    self._event_callback(event)
-                # 收集消息
-                self._process_event(event, params)
+        # 首次事件超时重试循环
+        max_retries = self._FIRST_EVENT_TIMEOUT_MAX_RETRIES
+        last_timeout_error: FirstEventTimeoutError | None = None
 
-            end_time = time.time()
-            self._ctx.debug_info.duration_sec = end_time - start_time
+        for attempt in range(max_retries):
+            # 每次尝试创建新的上下文
+            self._ctx = ExecutionContext()
 
-            # 检查是否有退出错误（非零退出码）
-            success = self._ctx.exit_error is None
+            try:
+                # 收集所有事件
+                async for event in self._run_process(cmd, params):
+                    # 回调通知
+                    if self._event_callback:
+                        self._event_callback(event)
+                    # 收集消息
+                    self._process_event(event, params)
 
-            result = ExecutionResult(
-                success=success,
-                session_id=self._ctx.session_id,
-                agent_messages=self._ctx.final_answer.strip(),  # 最终答案（最后一条）
-                thought_steps=[s.strip() for s in self._ctx.agent_messages],  # 中间消息（除最后一条外）
-                error=self._ctx.exit_error,  # 退出错误信息
-                gui_metadata=GUIMetadata(
-                    task_note=params.task_note,
-                    task_tags=params.task_tags,
-                    source=self.cli_name,
-                    start_time=start_time,
-                    end_time=end_time,
-                ),
-                debug_info=self._ctx.debug_info,
-            )
-            return result
-
-        except asyncio.CancelledError as e:
-            logger.warning(
-                f"{self.cli_name} execution cancelled "
-                f"(type={type(e).__name__}, process_alive={self._process is not None and self._process.returncode is None})"
-            )
-            end_time = time.time()
-            if self._ctx:
+                end_time = time.time()
                 self._ctx.debug_info.duration_sec = end_time - start_time
 
-            # 向 GUI 发送取消事件
-            if self._event_callback:
-                self._send_cancel_event(params)
+                # 检查是否有退出错误（非零退出码）
+                success = self._ctx.exit_error is None
 
-            # Re-raise 让取消异常传播到 MCP 框架
-            # 框架会正确处理取消响应
-            logger.debug(f"{self.cli_name} re-raising CancelledError")
-            raise
+                result = ExecutionResult(
+                    success=success,
+                    session_id=self._ctx.session_id,
+                    agent_messages=self._ctx.final_answer.strip(),  # 最终答案（最后一条）
+                    thought_steps=[s.strip() for s in self._ctx.agent_messages],  # 中间消息（除最后一条外）
+                    error=self._ctx.exit_error,  # 退出错误信息
+                    gui_metadata=GUIMetadata(
+                        task_note=params.task_note,
+                        task_tags=params.task_tags,
+                        source=self.cli_name,
+                        start_time=start_time,
+                        end_time=end_time,
+                    ),
+                    debug_info=self._ctx.debug_info,
+                )
+                return result
 
-        except BaseException as e:
-            # 捕获所有异常以便记录
-            logger.error(
-                f"{self.cli_name} BaseException: type={type(e).__name__}, "
-                f"msg={e}, is_Exception={isinstance(e, Exception)}"
-            )
-            if not isinstance(e, Exception):
-                # SystemExit, KeyboardInterrupt 等，直接 re-raise
-                raise
-
-            end_time = time.time()
-            debug_info = self._ctx.debug_info if self._ctx else DebugInfo()
-            debug_info.duration_sec = end_time - start_time
-
-            # 向 GUI 发送错误事件
-            if self._event_callback:
-                self._send_error_event(
-                    f"Execution failed: {e}",
-                    error_type="startup_failed",
+            except FirstEventTimeoutError as e:
+                last_timeout_error = e
+                remaining = max_retries - attempt - 1
+                logger.warning(
+                    f"{self.cli_name} first event timeout (attempt {attempt + 1}/{max_retries}), "
+                    f"retries remaining: {remaining}"
                 )
 
-            return ExecutionResult(
-                success=False,
-                error=str(e),
-                gui_metadata=GUIMetadata(
-                    task_note=params.task_note,
-                    task_tags=params.task_tags,
-                    source=self.cli_name,
-                    start_time=start_time,
-                    end_time=end_time,
-                ),
-                debug_info=debug_info,
-            )
-        finally:
-            # 清理上下文引用，释放内存（防止 invoker 复用时滞留大缓冲区）
-            logger.debug(f"{self.cli_name} execute() finally block")
-            self._ctx = None
+                # 向 GUI 发送超时重试通知
+                if self._event_callback:
+                    if remaining > 0:
+                        self._send_timeout_retry_event(attempt + 1, max_retries)
+                    else:
+                        self._send_error_event(
+                            f"Process unresponsive after {max_retries} attempts "
+                            f"(no response within {self._FIRST_EVENT_TIMEOUT:.0f}s each). "
+                            f"This may indicate network issues or API service problems.",
+                            error_type="timeout_exhausted",
+                        )
+
+                # 清理当前上下文
+                self._ctx = None
+
+                # 如果还有重试机会，继续循环
+                if remaining > 0:
+                    continue
+
+                # 全部重试失败，返回友好错误
+                end_time = time.time()
+                return ExecutionResult(
+                    success=False,
+                    error=(
+                        f"{self.cli_name} process did not respond after {max_retries} attempts. "
+                        f"Each attempt waited {self._FIRST_EVENT_TIMEOUT:.0f}s for the first response. "
+                        f"This usually indicates:\n"
+                        f"- Network connectivity issues\n"
+                        f"- API service (OpenAI/Anthropic/Google) is experiencing problems\n"
+                        f"- The CLI tool is not properly installed or configured\n"
+                        f"Please check your network connection and API service status, then try again."
+                    ),
+                    gui_metadata=GUIMetadata(
+                        task_note=params.task_note,
+                        task_tags=params.task_tags,
+                        source=self.cli_name,
+                        start_time=start_time,
+                        end_time=end_time,
+                    ),
+                )
+
+            except asyncio.CancelledError as e:
+                logger.warning(
+                    f"{self.cli_name} execution cancelled "
+                    f"(type={type(e).__name__}, process_alive={self._process is not None and self._process.returncode is None})"
+                )
+                end_time = time.time()
+                if self._ctx:
+                    self._ctx.debug_info.duration_sec = end_time - start_time
+
+                # 向 GUI 发送取消事件
+                if self._event_callback:
+                    self._send_cancel_event(params)
+
+                # Re-raise 让取消异常传播到 MCP 框架
+                # 框架会正确处理取消响应
+                logger.debug(f"{self.cli_name} re-raising CancelledError")
+                raise
+
+            except BaseException as e:
+                # 捕获所有异常以便记录
+                logger.error(
+                    f"{self.cli_name} BaseException: type={type(e).__name__}, "
+                    f"msg={e}, is_Exception={isinstance(e, Exception)}"
+                )
+                if not isinstance(e, Exception):
+                    # SystemExit, KeyboardInterrupt 等，直接 re-raise
+                    raise
+
+                end_time = time.time()
+                debug_info = self._ctx.debug_info if self._ctx else DebugInfo()
+                debug_info.duration_sec = end_time - start_time
+
+                # 向 GUI 发送错误事件
+                if self._event_callback:
+                    self._send_error_event(
+                        f"Execution failed: {e}",
+                        error_type="startup_failed",
+                    )
+
+                return ExecutionResult(
+                    success=False,
+                    error=str(e),
+                    gui_metadata=GUIMetadata(
+                        task_note=params.task_note,
+                        task_tags=params.task_tags,
+                        source=self.cli_name,
+                        start_time=start_time,
+                        end_time=end_time,
+                    ),
+                    debug_info=debug_info,
+                )
+            finally:
+                # 清理上下文引用，释放内存（防止 invoker 复用时滞留大缓冲区）
+                logger.debug(f"{self.cli_name} execute() finally block")
+                self._ctx = None
+
+        # 理论上不会到达这里，但为了类型安全
+        return ExecutionResult(
+            success=False,
+            error="Unexpected execution path",
+            gui_metadata=GUIMetadata(
+                task_note=params.task_note,
+                task_tags=params.task_tags,
+                source=self.cli_name,
+                start_time=start_time,
+                end_time=time.time(),
+            ),
+        )
 
     async def stream(
         self, params: CommonParams
@@ -627,6 +722,10 @@ class CLIInvoker(ABC):
 
         try:
             if self._process.stdout:
+                # 首次事件超时检测
+                first_event_received = False
+                first_event_timeout = self._FIRST_EVENT_TIMEOUT
+
                 # 使用手动循环替代 async for，以便能够检查 fatal_error_event
                 # async for line in stdout 会阻塞直到有数据，无法响应 fatal_error_event
                 while True:
@@ -642,10 +741,37 @@ class CLIInvoker(ABC):
                     read_task = asyncio.create_task(self._process.stdout.readline())
                     fatal_wait_task = asyncio.create_task(fatal_error_event.wait())
 
-                    done, pending = await asyncio.wait(
-                        [read_task, fatal_wait_task],
-                        return_when=asyncio.FIRST_COMPLETED,
-                    )
+                    # 首次事件使用超时，后续不限时
+                    timeout = first_event_timeout if not first_event_received else None
+
+                    try:
+                        done, pending = await asyncio.wait(
+                            [read_task, fatal_wait_task],
+                            return_when=asyncio.FIRST_COMPLETED,
+                            timeout=timeout,
+                        )
+                    except Exception:
+                        # wait 本身不会抛出超时，但以防万一
+                        done, pending = set(), {read_task, fatal_wait_task}
+
+                    # 检查是否超时（done 为空表示超时）
+                    if not done and not first_event_received:
+                        # 首次事件超时
+                        logger.warning(
+                            f"[FIRST EVENT TIMEOUT] No response from {self.cli_name} "
+                            f"within {first_event_timeout:.0f}s"
+                        )
+                        # 取消所有任务
+                        for task in pending:
+                            task.cancel()
+                            try:
+                                await task
+                            except asyncio.CancelledError:
+                                pass
+                        # 终止进程
+                        await self._terminate_subprocess()
+                        # 抛出超时异常，让 execute() 处理重试
+                        raise FirstEventTimeoutError(first_event_timeout, self.cli_name)
 
                     # 取消未完成的任务
                     for task in pending:
@@ -707,6 +833,11 @@ class CLIInvoker(ABC):
                         # 解析为统一事件
                         events = self._parse_raw_data(parser, data)
                         for event in events:
+                            # 标记已收到首次有效事件（忽略 lifecycle 事件如 turn_start）
+                            if not first_event_received and event.category.value != "lifecycle":
+                                first_event_received = True
+                                logger.debug(f"[FIRST EVENT] Received first valid event from {self.cli_name}")
+
                             # 检测 stdout 中的 error 事件（如 item.type=error）
                             if (
                                 event.category.value == "system"
@@ -1074,6 +1205,37 @@ class CLIInvoker(ABC):
             source = CLISource.UNKNOWN
 
         event = make_fallback_event(source, started_data)
+
+        if self._event_callback:
+            self._event_callback(event)
+
+    def _send_timeout_retry_event(self, attempt: int, max_attempts: int) -> None:
+        """发送超时重试事件到 GUI。
+
+        Args:
+            attempt: 当前尝试次数（从 1 开始）
+            max_attempts: 最大尝试次数
+        """
+        from ..parsers import make_fallback_event, CLISource
+
+        remaining = max_attempts - attempt
+        retry_data = {
+            "type": "system",
+            "subtype": "timeout_retry",
+            "severity": "warning",
+            "message": (
+                f"Process unresponsive (no response within {self._FIRST_EVENT_TIMEOUT:.0f}s). "
+                f"Restarting... (attempt {attempt}/{max_attempts}, {remaining} retries remaining)"
+            ),
+            "source": self.cli_name,
+        }
+
+        try:
+            source = CLISource(self.cli_name)
+        except ValueError:
+            source = CLISource.UNKNOWN
+
+        event = make_fallback_event(source, retry_data)
 
         if self._event_callback:
             self._event_callback(event)
