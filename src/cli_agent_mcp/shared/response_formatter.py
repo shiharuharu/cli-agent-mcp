@@ -29,6 +29,7 @@ class DebugInfo:
     output_tokens: int | None = None
     cancelled: bool = False
     log_file: str | None = None  # DEBUG 日志文件路径
+    save_file: str | None = None  # 输出保存文件路径
 
     def to_dict(self) -> dict[str, Any]:
         """转换为字典。"""
@@ -46,6 +47,8 @@ class DebugInfo:
             data["cancelled"] = True
         if self.log_file:
             data["log_file"] = self.log_file
+        if self.save_file:
+            data["save_file"] = self.save_file
         return data
 
 
@@ -198,6 +201,8 @@ class ResponseFormatter:
             lines.append("    <cancelled>true</cancelled>")
         if debug_info.log_file:
             lines.append(f"    <log_file>{debug_info.log_file}</log_file>")
+        if debug_info.save_file:
+            lines.append(f"    <save_file>{debug_info.save_file}</save_file>")
         lines.append("  </debug_info>")
         return "\n".join(lines)
 

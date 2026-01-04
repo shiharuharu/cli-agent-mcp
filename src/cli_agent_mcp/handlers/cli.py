@@ -156,6 +156,7 @@ class CLIHandler(ToolHandler):
                     output_tokens=result.debug_info.output_tokens if result.debug_info else None,
                     cancelled=result.cancelled,
                     log_file=ctx.config.log_file if ctx.config.log_debug else None,
+                    save_file=save_file_path or None,
                 )
 
             # 构建 ResponseData（直接使用 invoker 提取的统一数据）

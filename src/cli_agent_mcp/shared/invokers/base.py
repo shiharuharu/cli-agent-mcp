@@ -171,7 +171,7 @@ class CLIInvoker(ABC):
 
     # 首次事件超时（秒）- 进程启动后等待第一个 stdout 事件的最大时间
     # 超过此时间没有收到任何输出，认为进程死掉了
-    _FIRST_EVENT_TIMEOUT: float = 120.0
+    _FIRST_EVENT_TIMEOUT: float = 300.0
 
     # 首次事件超时最大重试次数
     _FIRST_EVENT_TIMEOUT_MAX_RETRIES: int = 3

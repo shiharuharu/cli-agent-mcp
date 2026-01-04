@@ -323,6 +323,7 @@ class ParallelHandler(ToolHandler):
                 duration_sec=duration_sec,
                 message_count=len(results),
                 tool_call_count=0,
+                save_file=save_file or None,
             )
 
         # 返回 wrapped 内容（与 save_file_with_wrapper 格式一致）
