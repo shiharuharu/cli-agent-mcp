@@ -14,7 +14,7 @@ from typing import Any
 from mcp.types import TextContent
 
 from .base import ToolContext, ToolHandler
-from .cli import build_params
+from .cli import build_params, normalize_path_arguments
 from ..shared.invokers import create_invoker
 from ..shared.response_formatter import (
     ResponseData,
@@ -61,12 +61,18 @@ class ParallelHandler(ToolHandler):
     def validate(self, arguments: dict[str, Any]) -> str | None:
         prompts = arguments.get("parallel_prompts", [])
         task_notes = arguments.get("parallel_task_notes", [])
+        continuation_ids = arguments.get("parallel_continuation_ids", [])
+        context_paths_parallel = arguments.get("context_paths_parallel", [])
 
         # 类型校验
         if not isinstance(prompts, list):
             return "parallel_prompts must be a list"
         if not isinstance(task_notes, list):
             return "parallel_task_notes must be a list"
+        if not isinstance(continuation_ids, list):
+            return "parallel_continuation_ids must be a list"
+        if not isinstance(context_paths_parallel, list):
+            return "context_paths_parallel must be a list"
 
         if not prompts:
             return "parallel_prompts is required"
@@ -90,13 +96,27 @@ class ParallelHandler(ToolHandler):
         if len(prompts) > 100:
             return "parallel_prompts exceeds maximum of 100"
 
-        if arguments.get("continuation_id"):
-            return "continuation_id input is not supported in parallel mode"
+        # continuation_ids 校验：如果提供，长度必须与 prompts 一致
+        if continuation_ids and len(continuation_ids) != len(prompts):
+            return f"parallel_continuation_ids length ({len(continuation_ids)}) must equal parallel_prompts length ({len(prompts)})"
 
         # model 数组校验
         models = arguments.get("model", [])
         if isinstance(models, list) and len(models) > 1 and len(models) != len(prompts):
             return f"model array length ({len(models)}) must be 1 or match parallel_prompts length ({len(prompts)})"
+
+        # context_paths_parallel 校验：如果提供，长度必须为空或与 prompts 一致
+        if context_paths_parallel and len(context_paths_parallel) != len(prompts):
+            return (
+                f"context_paths_parallel length ({len(context_paths_parallel)}) must be empty or "
+                f"match parallel_prompts length ({len(prompts)})"
+            )
+        for i, paths in enumerate(context_paths_parallel):
+            if not isinstance(paths, list):
+                return f"context_paths_parallel[{i}] must be a list"
+            for j, p in enumerate(paths):
+                if not isinstance(p, str):
+                    return f"context_paths_parallel[{i}][{j}] must be a string"
 
         if not arguments.get("save_file"):
             return "save_file is required in parallel mode"
@@ -113,6 +133,8 @@ class ParallelHandler(ToolHandler):
         error = self.validate(arguments)
         if error:
             return format_error_response(error)
+
+        arguments = normalize_path_arguments(self._base_name, arguments)
 
         prompts = arguments.get("parallel_prompts", [])
         task_notes = arguments.get("parallel_task_notes", [])
@@ -132,15 +154,23 @@ class ParallelHandler(ToolHandler):
 
         # 2) 构建子任务
         sub_tasks = []
-        context_paths = arguments.get("context_paths", [])
         report_mode = arguments.get("report_mode", False)
         models = arguments.get("model", [])
+        continuation_ids = arguments.get("parallel_continuation_ids", []) or []
+        shared_context_paths = arguments.get("context_paths", []) or []
+        parallel_context_paths = arguments.get("context_paths_parallel", []) or []
         if not isinstance(models, list):
             models = [models] if models else []
 
         for idx, (prompt, note) in enumerate(zip(prompts, task_notes), start=1):
-            # 注入 context_paths 和 report_mode
-            final_prompt = inject_context_and_report_mode(prompt, context_paths, report_mode)
+            # 注入 report_mode + context_paths（shared + per-task）
+            per_task_paths = parallel_context_paths[idx - 1] if idx <= len(parallel_context_paths) else []
+            merged_paths_raw = [*shared_context_paths, *per_task_paths] if per_task_paths else shared_context_paths
+            merged_paths = normalize_path_arguments(
+                self._base_name,
+                {"workspace": arguments.get("workspace"), "context_paths": merged_paths_raw},
+            ).get("context_paths", [])
+            final_prompt = inject_context_and_report_mode(prompt, merged_paths, report_mode)
             # model 分发：单个则共享，多个则按索引分配
             if len(models) == 1:
                 model = models[0]
@@ -148,12 +178,16 @@ class ParallelHandler(ToolHandler):
                 model = models[idx - 1]
             else:
                 model = ""
+            # continuation_id 分发：按索引分配，空字符串表示新任务
+            continuation_id = continuation_ids[idx - 1] if idx <= len(continuation_ids) else ""
             sub_tasks.append({
                 "prompt": final_prompt,
                 "workspace": arguments.get("workspace"),
                 "permission": arguments.get("permission", "read-only"),
                 "model": model,
                 "task_note": note,
+                "continuation_id": continuation_id,  # 支持续聊
+                "task_tags": arguments.get("task_tags", []),
                 "_task_index": idx,
                 # CLI 特有参数
                 "image": arguments.get("image", []),  # codex
@@ -271,6 +305,7 @@ class ParallelHandler(ToolHandler):
         # 4.5) 批量写入文件（单次 I/O 操作）
         if all_wrapped:
             try:
+                # DESIGN: save_file 在 permission='read-only' 下允许写入是特性（用于保存并行输出），不是风险或越权。
                 file_path = Path(save_file)
                 file_path.parent.mkdir(parents=True, exist_ok=True)
                 content_to_write = "\n".join(all_wrapped)
@@ -280,7 +315,7 @@ class ParallelHandler(ToolHandler):
                 else:
                     file_path.write_text(content_to_write, encoding="utf-8")
             except Exception as e:
-                logger.error(f"Failed to write to {save_file}: {e}")
+                logger.error(f"Failed to write to {save_file}: {e}", exc_info=True)
                 return format_error_response(f"Failed to write to {save_file}: {e}")
 
         # 5) 返回 wrapped 内容（与 save_file_with_wrapper 格式一致）

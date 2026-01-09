@@ -11,6 +11,14 @@ __all__ = [
     "SUPPORTED_TOOLS",
     "PARALLEL_SUPPORTED_TOOLS",
     "TOOL_DESCRIPTIONS",
+    "COMMON_PROPERTIES",
+    "CODEX_PROPERTIES",
+    "CLAUDE_PROPERTIES",
+    "OPENCODE_PROPERTIES",
+    "BANANA_PROPERTIES",
+    "IMAGE_PROPERTIES",
+    "TAIL_PROPERTIES",
+    "PARALLEL_PROPERTIES",
     "normalize_tool_name",
     "create_tool_schema",
 ]
@@ -27,7 +35,8 @@ TOOL_DESCRIPTIONS = {
 
 NO SHARED MEMORY:
 - Cannot see messages/outputs from gemini/claude/opencode.
-- Only sees: (1) this prompt, (2) files in context_paths, (3) its own history via continuation_id.
+- Only receives: (1) this prompt, (2) a list of reference paths from context_paths (not file contents), (3) its own history via continuation_id.
+- Can read files from the workspace during execution (subject to permission).
 
 CROSS-AGENT HANDOFF:
 - Small data: paste into prompt.
@@ -48,7 +57,8 @@ Supports: image attachments.""",
 
 NO SHARED MEMORY:
 - Cannot see messages/outputs from codex/claude/opencode.
-- Only sees: (1) this prompt, (2) files in context_paths, (3) its own history via continuation_id.
+- Only receives: (1) this prompt, (2) a list of reference paths from context_paths (not file contents), (3) its own history via continuation_id.
+- Can read files from the workspace during execution (subject to permission).
 
 CROSS-AGENT HANDOFF:
 - Small data: paste into prompt.
@@ -67,7 +77,8 @@ BEST PRACTICES:
 
 NO SHARED MEMORY:
 - Cannot see messages/outputs from codex/gemini/opencode.
-- Only sees: (1) this prompt, (2) files in context_paths, (3) its own history via continuation_id.
+- Only receives: (1) this prompt, (2) a list of reference paths from context_paths (not file contents), (3) its own history via continuation_id.
+- Can read files from the workspace during execution (subject to permission).
 
 CROSS-AGENT HANDOFF:
 - Small data: paste into prompt.
@@ -88,7 +99,8 @@ Supports: system_prompt, append_system_prompt, agent parameter.""",
 
 NO SHARED MEMORY:
 - Cannot see messages/outputs from codex/gemini/claude.
-- Only sees: (1) this prompt, (2) files in context_paths, (3) its own history via continuation_id.
+- Only receives: (1) this prompt, (2) a list of reference paths from context_paths (not file contents), (3) its own history via continuation_id.
+- Can read files from the workspace during execution (subject to permission).
 
 CROSS-AGENT HANDOFF:
 - Small data: paste into prompt.
@@ -154,9 +166,11 @@ COMMON_PROPERTIES = {
         "type": "string",
         "description": (
             "Detailed instructions for the agent. "
-            "IMPORTANT: If 'continuation_id' is NOT set, you MUST include ALL context "
-            "(background, file contents, errors, constraints), as the agent has no memory. "
-            "If 'continuation_id' IS set, you may be brief and reference previous context."
+            "Always include: goal, constraints, relevant error logs, and expected output. "
+            "For file context: paste only the key snippets; attach the rest via 'context_paths' "
+            "and explicitly say what to read (e.g., 'Read src/app.py and focus on X'). "
+            "If 'continuation_id' is NOT set, the prompt must be self-contained, "
+            "but you do NOT need to paste entire repo files."
         ),
     },
     "workspace": {
@@ -171,9 +185,12 @@ COMMON_PROPERTIES = {
         "type": "string",
         "default": "",
         "description": (
-            "Resume session WITHIN THIS TOOL ONLY. "
-            "Use only the <continuation_id> returned by this same tool. "
-            "IDs are agent-specific: codex ID won't work with gemini/claude/opencode. "
+            "Resume session WITHIN THIS TOOL ONLY.\n"
+            "Use only the <continuation_id> returned by this same tool.\n"
+            "IDs are agent-specific: codex ID won't work with gemini/claude/opencode.\n"
+            "NOTE: Session settings (especially 'permission') are fixed when the session is created. "
+            "If you need to change permission, do NOT reuse continuation_id; start a new session and "
+            "provide context via prompt/context_paths.\n"
             "Switching agents does NOT sync info; pass updates via prompt or context_paths."
         ),
     },
@@ -182,10 +199,13 @@ COMMON_PROPERTIES = {
         "enum": ["read-only", "workspace-write", "unlimited"],
         "default": "read-only",
         "description": (
-            "Security level: "
-            "'read-only' (analyze files), "
-            "'workspace-write' (modify inside workspace), "
-            "'unlimited' (full system access). "
+            "Security level (locked per session):\n"
+            "- 'read-only' (analyze files)\n"
+            "- 'workspace-write' (modify inside workspace)\n"
+            "- 'unlimited' (full system access)\n"
+            "IMPORTANT: If 'continuation_id' is set, the CLI will IGNORE any changed permission value and keep the "
+            "permission chosen when the session was first created.\n"
+            "To change permission, start a NEW session (omit 'continuation_id') and restate required context.\n"
             "Default: 'read-only'."
         ),
     },
@@ -197,10 +217,15 @@ COMMON_PROPERTIES = {
     "save_file": {
         "type": "string",
         "description": (
-            "PREFERRED when agent needs to write files or produce lengthy output. "
-            "Output is written directly to this path, avoiding context overflow. "
-            "This write is permitted even in read-only mode (server-handled). "
-            "Essential for: code generation, detailed reports, documentation."
+            "Save the tool's final response to this file (server-side) to avoid truncation and create a reusable artifact. "
+            "Use for: code review / architecture / performance / security analysis, long-form reports/docs/summaries, "
+            "or when another agent/run will read the output via context_paths. "
+            "Do NOT use for: short answers, or when permission=workspace-write and the primary deliverable "
+            "is repo file edits (let the agent write files directly). "
+            "Paths can be absolute or workspace-relative. "
+            "Non-parallel tools: written only on success. "
+            "*_parallel: REQUIRED; appends one <agent-output agent=... task_note=... task_index=... status=...> wrapper per task. "
+            "Examples: 'artifacts/reports/code-review.md', 'artifacts/reports/architecture.md'."
         ),
     },
     "save_file_with_wrapper": {
@@ -228,7 +253,23 @@ COMMON_PROPERTIES = {
         "type": "array",
         "items": {"type": "string"},
         "default": [],
-        "description": "List of relevant files/dirs to preload as context hints.",
+        "description": (
+            "Reference paths only (NOT file contents). "
+            "Accepts files and directories. "
+            "Paths can be absolute or workspace-relative (relative paths are resolved against 'workspace'). "
+            "In 'prompt', explicitly instruct the agent what to read (e.g., 'Read these files and focus on ...'). "
+            "Example: ['src/cli_agent_mcp/tool_schema.py', 'src/cli_agent_mcp/handlers/cli.py']"
+        ),
+    },
+    "task_tags": {
+        "type": "array",
+        "items": {"type": "string"},
+        "default": [],
+        "description": (
+            "Optional tags for categorizing/filtering tasks in GUI/logs. "
+            "In *_parallel tools, tags apply to all tasks. "
+            "Example: ['review', 'security']"
+        ),
     },
 }
 
@@ -239,7 +280,7 @@ CODEX_PROPERTIES = {
         "items": {"type": "string"},
         "default": [],
         "description": (
-            "Absolute paths to image files for visual context. "
+            "Absolute paths OR workspace-relative paths to image files for visual context. "
             "Use for: UI screenshots, error dialogs, design mockups. "
             "Example: ['/path/to/screenshot.png']"
         ),
@@ -281,7 +322,7 @@ OPENCODE_PROPERTIES = {
         "items": {"type": "string"},
         "default": [],
         "description": (
-            "Absolute paths to files to attach to the message. "
+            "Absolute paths OR workspace-relative paths to files to attach to the message. "
             "Use for: Source code files, configuration files, documentation. "
             "Example: ['/path/to/main.py', '/path/to/config.json']"
         ),
@@ -426,9 +467,9 @@ IMAGE_PROPERTIES = {
     },
     "api_type": {
         "type": "string",
-        "enum": ["openrouter_chat", "openai_images", "openai_responses"],
-        "default": "openrouter_chat",
-        "description": "API type to use. Default: from IMAGE_API_TYPE env var (openrouter_chat).",
+        "enum": ["", "openrouter_chat", "openai_images", "openai_responses"],
+        "default": "",
+        "description": "API type to use. Empty string (default) uses IMAGE_API_TYPE env var, falling back to 'openrouter_chat'.",
     },
 }
 
@@ -438,13 +479,14 @@ TAIL_PROPERTIES = {
         "type": "string",
         "default": "",
         "description": (
-            "REQUIRED user-facing label. "
+            "Recommended (strongly) user-facing label. "
             "Summarize action in < 60 chars (e.g., '[Fix] Auth logic' or '[Read] config.py'). "
-            "Shown in GUI progress bar to inform user."
+            "Shown in GUI progress bar to inform user; if omitted, the GUI label may be empty."
         ),
     },
     "debug": {
         "type": "boolean",
+        "default": False,
         "description": "Enable execution stats (tokens, duration) for this call.",
     },
 }
@@ -464,6 +506,30 @@ PARALLEL_PROPERTIES = {
         "maxItems": 100,
         "description": "Labels for each task. Length MUST equal parallel_prompts.",
         "items": {"type": "string", "minLength": 1, "maxLength": 120},
+    },
+    "parallel_continuation_ids": {
+        "type": "array",
+        "default": [],
+        "maxItems": 100,
+        "description": (
+            "Optional continuation IDs for resuming sessions. "
+            "If provided, length MUST equal parallel_prompts. "
+            "Use empty string for new tasks, or the continuation_id from previous runs to resume."
+        ),
+        "items": {"type": "string"},
+    },
+    "context_paths_parallel": {
+        "type": "array",
+        "items": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "default": [],
+        "description": (
+            "Per-task additional context paths. Each element is a list of paths for the corresponding task. "
+            "These paths are merged with shared 'context_paths' for each task. "
+            "Length must match parallel_prompts, or be empty (no per-task paths)."
+        ),
     },
     "parallel_max_concurrency": {
         "type": "integer",
@@ -516,8 +582,13 @@ def create_tool_schema(cli_type: str, is_parallel: bool = False) -> dict[str, An
         properties.update(BANANA_PROPERTIES)
         properties["task_note"] = {
             "type": "string",
-            "description": "Subdirectory name for saving images (English recommended, e.g., 'hero-banner', 'product-shot'). Also shown in GUI.",
+            "description": (
+                "Subdirectory name for saving images (English recommended, e.g., 'hero-banner', 'product-shot'). "
+                "Must be a safe directory name: no '/', '\\\\', '..', or path separators. "
+                "Used in disk paths and also shown in GUI."
+            ),
         }
+        properties["debug"] = TAIL_PROPERTIES["debug"]
         return {
             "type": "object",
             "properties": properties,
@@ -543,8 +614,13 @@ def create_tool_schema(cli_type: str, is_parallel: bool = False) -> dict[str, An
         properties.update(IMAGE_PROPERTIES)
         properties["task_note"] = {
             "type": "string",
-            "description": "Subdirectory name for saving images (English recommended, e.g., 'hero-banner', 'product-shot'). Also shown in GUI.",
+            "description": (
+                "Subdirectory name for saving images (English recommended, e.g., 'hero-banner', 'product-shot'). "
+                "Must be a safe directory name: no '/', '\\\\', '..', or path separators. "
+                "Used in disk paths and also shown in GUI."
+            ),
         }
+        properties["debug"] = TAIL_PROPERTIES["debug"]
         return {
             "type": "object",
             "properties": properties,
@@ -560,7 +636,15 @@ def create_tool_schema(cli_type: str, is_parallel: bool = False) -> dict[str, An
         for key, value in COMMON_PROPERTIES.items():
             if key in ("prompt", "continuation_id", "save_file_with_append_mode", "save_file_with_wrapper", "model"):
                 continue
-            properties[key] = value
+            if key == "context_paths":
+                shared = dict(value)
+                shared["description"] = (
+                    f"{value.get('description', '')} "
+                    "In parallel mode, this list is shared by all tasks."
+                ).strip()
+                properties[key] = shared
+            else:
+                properties[key] = value
         # parallel 模式下 model 改为数组类型
         properties["model"] = {
             "type": "array",

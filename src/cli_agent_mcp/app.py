@@ -11,8 +11,6 @@ import logging
 import sys
 import time
 
-from mcp.server.stdio import stdio_server
-
 from .config import get_config
 from .gui_manager import GUIConfig, GUIManager
 from .orchestrator import RequestRegistry
@@ -36,7 +34,7 @@ async def run_server() -> None:
     - shutdown_watcher: 监听 shutdown 事件并取消 server_task
     """
     config = get_config()
-    logger.info(f"Starting CLI Agent MCP Server: {config}")
+    logger.info(f"Starting CLI Agent MCP Server (FastMCP): {config}")
 
     # 创建请求注册表和信号管理器
     registry = RequestRegistry()
@@ -109,20 +107,15 @@ async def run_server() -> None:
         on_shutdown=on_shutdown,
     )
 
-    # 创建并运行 server
-    server = create_server(gui_manager, registry)
+    # 创建 FastMCP server
+    mcp = create_server(gui_manager, registry)
 
     # 定义 server 运行协程
     async def _run_server_impl():
-        """运行 MCP server 的内部实现。"""
-        async with stdio_server() as (read_stream, write_stream):
-            logger.debug("stdio_server context entered, starting server.run()")
-            await server.run(
-                read_stream,
-                write_stream,
-                server.create_initialization_options(),
-            )
-            logger.debug("server.run() completed normally")
+        """运行 FastMCP server 的内部实现。"""
+        logger.debug("Starting FastMCP server with stdio transport")
+        await mcp.run_stdio_async()
+        logger.debug("FastMCP server completed normally")
 
     # 定义 shutdown 监听协程
     async def _watch_shutdown():

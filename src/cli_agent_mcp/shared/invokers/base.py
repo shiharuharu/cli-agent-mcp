@@ -171,7 +171,9 @@ class CLIInvoker(ABC):
 
     # 首次事件超时（秒）- 进程启动后等待第一个 stdout 事件的最大时间
     # 超过此时间没有收到任何输出，认为进程死掉了
-    _FIRST_EVENT_TIMEOUT: float = 300.0
+    # 续聊（有 session_id）使用较长超时，新任务使用较短超时
+    _FIRST_EVENT_TIMEOUT_RESUME: float = 300.0  # 续聊：300 秒
+    _FIRST_EVENT_TIMEOUT_NEW: float = 60.0      # 新任务：60 秒
 
     # 首次事件超时最大重试次数
     _FIRST_EVENT_TIMEOUT_MAX_RETRIES: int = 3
@@ -333,7 +335,9 @@ class CLIInvoker(ABC):
         重要：每次调用都会创建新的 ExecutionContext，确保请求间状态隔离。
 
         首次事件超时重试机制：
-        - 如果进程启动后超过 _FIRST_EVENT_TIMEOUT 秒没有收到第一个事件，自动重试
+        - 如果进程启动后超过首次事件超时时间没有收到第一个事件，自动重试
+          - 新任务（无 session_id）：_FIRST_EVENT_TIMEOUT_NEW
+          - 续聊（有 session_id）：_FIRST_EVENT_TIMEOUT_RESUME
         - 最多重试 _FIRST_EVENT_TIMEOUT_MAX_RETRIES 次
         - 重试时向 GUI 发送通知
         - 全部失败后返回友好错误信息
@@ -415,11 +419,11 @@ class CLIInvoker(ABC):
                 # 向 GUI 发送超时重试通知
                 if self._event_callback:
                     if remaining > 0:
-                        self._send_timeout_retry_event(attempt + 1, max_retries)
+                        self._send_timeout_retry_event(attempt + 1, max_retries, e.timeout)
                     else:
                         self._send_error_event(
                             f"Process unresponsive after {max_retries} attempts "
-                            f"(no response within {self._FIRST_EVENT_TIMEOUT:.0f}s each). "
+                            f"(no response within {e.timeout:.0f}s each). "
                             f"This may indicate network issues or API service problems.",
                             error_type="timeout_exhausted",
                         )
@@ -437,7 +441,7 @@ class CLIInvoker(ABC):
                     success=False,
                     error=(
                         f"{self.cli_name} process did not respond after {max_retries} attempts. "
-                        f"Each attempt waited {self._FIRST_EVENT_TIMEOUT:.0f}s for the first response. "
+                        f"Each attempt waited {e.timeout:.0f}s for the first response. "
                         f"This usually indicates:\n"
                         f"- Network connectivity issues\n"
                         f"- API service (OpenAI/Anthropic/Google) is experiencing problems\n"
@@ -723,8 +727,18 @@ class CLIInvoker(ABC):
         try:
             if self._process.stdout:
                 # 首次事件超时检测
+                # 使用较长超时的情况：
+                # 1. 有 session_id（续聊）- 需要恢复会话状态
+                # 2. Codex 有 image 参数 - 需要处理图片上传
                 first_event_received = False
-                first_event_timeout = self._FIRST_EVENT_TIMEOUT
+                needs_longer_timeout = (
+                    params.session_id
+                    or (hasattr(params, "image") and params.image)
+                )
+                first_event_timeout = (
+                    self._FIRST_EVENT_TIMEOUT_RESUME if needs_longer_timeout
+                    else self._FIRST_EVENT_TIMEOUT_NEW
+                )
 
                 # 使用手动循环替代 async for，以便能够检查 fatal_error_event
                 # async for line in stdout 会阻塞直到有数据，无法响应 fatal_error_event
@@ -1209,12 +1223,13 @@ class CLIInvoker(ABC):
         if self._event_callback:
             self._event_callback(event)
 
-    def _send_timeout_retry_event(self, attempt: int, max_attempts: int) -> None:
+    def _send_timeout_retry_event(self, attempt: int, max_attempts: int, timeout: float) -> None:
         """发送超时重试事件到 GUI。
 
         Args:
             attempt: 当前尝试次数（从 1 开始）
             max_attempts: 最大尝试次数
+            timeout: 首次事件超时时间（秒）
         """
         from ..parsers import make_fallback_event, CLISource
 
@@ -1224,7 +1239,7 @@ class CLIInvoker(ABC):
             "subtype": "timeout_retry",
             "severity": "warning",
             "message": (
-                f"Process unresponsive (no response within {self._FIRST_EVENT_TIMEOUT:.0f}s). "
+                f"Process unresponsive (no response within {timeout:.0f}s). "
                 f"Restarting... (attempt {attempt}/{max_attempts}, {remaining} retries remaining)"
             ),
             "source": self.cli_name,

@@ -5,13 +5,15 @@
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Protocol
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Callable
 
 from mcp.types import TextContent
 
 if TYPE_CHECKING:
+    from fastmcp import Context
     from ..config import Config
     from ..gui_manager import GUIManager
     from ..orchestrator import RequestRegistry
@@ -20,6 +22,8 @@ __all__ = [
     "ToolContext",
     "ToolHandler",
 ]
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -35,12 +39,62 @@ class ToolContext:
     push_to_gui: Callable[[dict[str, Any]], None]
     push_user_prompt: Callable[[str, str, str], None]
     make_event_callback: Callable[[str, str, int | None], Callable[[Any], None] | None]
+    mcp_context: "Context | None" = field(default=None)
 
     def resolve_debug(self, arguments: dict[str, Any]) -> bool:
         """统一解析 debug 开关。"""
-        if "debug" in arguments:
-            return bool(arguments["debug"])
-        return self.config.debug
+        return bool(arguments.get("debug")) or self.config.debug
+
+    def has_progress_token(self) -> bool:
+        """检查当前 MCP 请求是否带有 progressToken。"""
+        if not self.mcp_context:
+            return False
+        request_context = getattr(self.mcp_context, "request_context", None)
+        if not request_context:
+            return False
+        meta = getattr(request_context, "meta", None)
+        if not meta:
+            return False
+        return getattr(meta, "progressToken", None) is not None
+
+    async def report_progress(
+        self,
+        progress: float,
+        total: float | None = None,
+        message: str | None = None,
+    ) -> None:
+        """报告进度（用于长时间运行的任务保活）。
+
+        Args:
+            progress: 当前进度值
+            total: 总进度值（可选）
+            message: 进度消息（可选）
+        """
+        if self.mcp_context:
+            await self.mcp_context.report_progress(
+                progress=progress,
+                total=total,
+                message=message,
+            )
+
+    async def report_progress_safe(
+        self,
+        progress: float,
+        total: float | None = None,
+        message: str | None = None,
+    ) -> None:
+        """best-effort 报告进度，失败仅记录日志不影响主流程。"""
+        try:
+            await self.report_progress(progress=progress, total=total, message=message)
+        except Exception as e:
+            logger.warning(
+                "Failed to report progress (progress=%s, total=%s, message=%r): %s",
+                progress,
+                total,
+                message,
+                e,
+                exc_info=True,
+            )
 
 
 class ToolHandler(ABC):

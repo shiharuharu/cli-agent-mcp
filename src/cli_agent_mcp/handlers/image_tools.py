@@ -14,6 +14,7 @@ from mcp.types import TextContent
 from .base import ToolContext, ToolHandler
 from ..shared.invokers import BananaInvoker, BananaParams, ImageInvoker, ImageParams
 from ..shared.response_formatter import ResponseData, get_formatter, format_error_response
+from ..tool_schema import create_tool_schema
 
 __all__ = ["BananaHandler", "ImageHandler"]
 
@@ -52,25 +53,7 @@ BEST PRACTICES:
 Supports: reference images with roles (edit_base, style_ref, etc.)."""
 
     def get_input_schema(self) -> dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "prompt": {"type": "string", "description": "Image generation prompt"},
-                "save_path": {"type": "string", "description": "Base directory for saving images"},
-                "task_note": {"type": "string", "description": "Subdirectory name for saving images"},
-                "images": {"type": "array", "items": {"type": "object"}, "default": []},
-                "aspect_ratio": {"type": "string", "default": "1:1"},
-                "resolution": {"type": "string", "default": "4K", "enum": ["1K", "2K", "4K"]},
-                "use_search": {"type": "boolean", "default": False},
-                "include_thoughts": {"type": "boolean", "default": False},
-                "temperature": {"type": "number", "default": 1.0},
-                "top_p": {"type": "number", "default": 0.95},
-                "top_k": {"type": "integer", "default": 40},
-                "num_images": {"type": "integer", "default": 1, "minimum": 1, "maximum": 4},
-                "debug": {"type": "boolean", "description": "Enable debug output"},
-            },
-            "required": ["prompt", "save_path", "task_note"],
-        }
+        return create_tool_schema("banana")
 
     def validate(self, arguments: dict[str, Any]) -> str | None:
         if not arguments.get("prompt"):
@@ -86,6 +69,10 @@ Supports: reference images with roles (edit_base, style_ref, etc.)."""
         arguments: dict[str, Any],
         ctx: ToolContext,
     ) -> list[TextContent]:
+        error = self.validate(arguments)
+        if error:
+            return format_error_response(error)
+
         prompt = arguments.get("prompt", "")
         task_note = arguments.get("task_note", "")
 
@@ -113,6 +100,7 @@ Supports: reference images with roles (edit_base, style_ref, etc.)."""
             top_p=arguments.get("top_p", 0.95),
             top_k=arguments.get("top_k", 40),
             num_images=arguments.get("num_images", 1),
+            # DESIGN: save_path 在 permission='read-only' 下允许写入是特性（用于保存生成结果），不是风险或越权。
             save_path=arguments.get("save_path", ""),
             task_note=task_note,
         )
@@ -201,22 +189,7 @@ BEST PRACTICES:
 Supports: reference images for editing."""
 
     def get_input_schema(self) -> dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "prompt": {"type": "string", "description": "Image generation prompt"},
-                "save_path": {"type": "string", "description": "Base directory for saving images"},
-                "task_note": {"type": "string", "description": "Subdirectory name for saving images"},
-                "model": {"type": "string", "default": ""},
-                "images": {"type": "array", "items": {"type": "object"}, "default": []},
-                "aspect_ratio": {"type": "string", "default": "1:1"},
-                "resolution": {"type": "string", "default": "1K", "enum": ["1K", "2K", "4K"]},
-                "quality": {"type": "string", "default": "standard"},
-                "api_type": {"type": "string", "default": ""},
-                "debug": {"type": "boolean", "description": "Enable debug output"},
-            },
-            "required": ["prompt", "save_path", "task_note"],
-        }
+        return create_tool_schema("image")
 
     def validate(self, arguments: dict[str, Any]) -> str | None:
         if not arguments.get("prompt"):
@@ -232,6 +205,10 @@ Supports: reference images for editing."""
         arguments: dict[str, Any],
         ctx: ToolContext,
     ) -> list[TextContent]:
+        error = self.validate(arguments)
+        if error:
+            return format_error_response(error)
+
         prompt = arguments.get("prompt", "")
         task_note = arguments.get("task_note", "")
 
@@ -252,6 +229,7 @@ Supports: reference images for editing."""
             prompt=prompt,
             model=arguments.get("model", ""),
             images=arguments.get("images", []),
+            # DESIGN: save_path 在 permission='read-only' 下允许写入是特性（用于保存生成结果），不是风险或越权。
             save_path=arguments.get("save_path", ""),
             task_note=task_note,
             aspect_ratio=arguments.get("aspect_ratio", "1:1"),
