@@ -14,7 +14,7 @@ from typing import Any
 from mcp.types import TextContent
 
 from .base import ToolContext, ToolHandler
-from .cli import build_params, normalize_path_arguments
+from .cli import build_params, normalize_path_arguments, resolve_workspace_relative_path
 from ..shared.invokers import create_invoker
 from ..shared.response_formatter import (
     ResponseData,
@@ -28,6 +28,9 @@ from ..utils.prompt_injection import inject_context_and_report_mode
 __all__ = ["ParallelHandler"]
 
 logger = logging.getLogger(__name__)
+
+# 进度报告间隔（秒）- 用于 parallel 模式长任务保活
+PROGRESS_REPORT_INTERVAL = 30
 
 
 class ParallelHandler(ToolHandler):
@@ -138,7 +141,14 @@ class ParallelHandler(ToolHandler):
 
         prompts = arguments.get("parallel_prompts", [])
         task_notes = arguments.get("parallel_task_notes", [])
-        save_file = arguments.get("save_file")
+        save_file_raw = arguments.get("save_file") or ""
+        workspace_raw = arguments.get("workspace") or ""
+        workspace = Path(workspace_raw)
+        save_file = (
+            str(resolve_workspace_relative_path(workspace, save_file_raw))
+            if save_file_raw
+            else save_file_raw
+        )
 
         # clamp concurrency (handle string/invalid types)
         try:
@@ -202,15 +212,51 @@ class ParallelHandler(ToolHandler):
         should_stop = False
         results: list[tuple[int, str, Any]] = []  # (task_index, task_note, result|Exception|None)
 
+        # progress reporter（MCP 保活）
+        progress_task: asyncio.Task | None = None
+        done_count = 0
+        total_tasks = len(sub_tasks)
+
+        async def progress_reporter():
+            """定期报告进度以保持连接活跃。"""
+            try:
+                while True:
+                    await asyncio.sleep(PROGRESS_REPORT_INTERVAL)
+                    await ctx.report_progress_safe(
+                        progress=done_count,
+                        total=total_tasks,
+                        message=f"Parallel running... ({done_count}/{total_tasks} completed)",
+                    )
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.warning(f"Parallel progress reporter crashed: {e}", exc_info=True)
+
+        async def stop_progress_reporter() -> None:
+            """停止后台进度保活任务，并确保异常不会泄漏。"""
+            nonlocal progress_task
+            if not progress_task:
+                return
+            if not progress_task.done():
+                progress_task.cancel()
+            try:
+                await progress_task
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                logger.warning(f"Parallel progress reporter task failed: {e}", exc_info=True)
+            finally:
+                progress_task = None
+
         async def run_one(sub_args: dict):
-            nonlocal should_stop
+            nonlocal should_stop, done_count
 
             async with sem:
-                # fail_fast 检查必须在拿到 semaphore 后
-                if fail_fast and should_stop:
-                    return (sub_args["_task_index"], sub_args["task_note"], None)  # skipped
-
                 try:
+                    # fail_fast 检查必须在拿到 semaphore 后
+                    if fail_fast and should_stop:
+                        return (sub_args["_task_index"], sub_args["task_note"], None)  # skipped
+
                     # 创建 invoker（传入 task_note 和 task_index 用于 GUI 显示）
                     task_note = sub_args.get("task_note", "")
                     task_index = sub_args.get("_task_index")
@@ -234,12 +280,27 @@ class ParallelHandler(ToolHandler):
                     if fail_fast:
                         should_stop = True
                     return (sub_args["_task_index"], sub_args["task_note"], e)
+                finally:
+                    done_count += 1
+                    if ctx.has_progress_token():
+                        asyncio.create_task(
+                            ctx.report_progress_safe(
+                                progress=done_count,
+                                total=total_tasks,
+                                message=f"Parallel progress: {done_count}/{total_tasks}",
+                            )
+                        )
 
         start_time = time.time()
         try:
+            if ctx.has_progress_token():
+                progress_task = asyncio.create_task(progress_reporter())
+
             raw_results = await asyncio.gather(*[run_one(t) for t in sub_tasks], return_exceptions=True)
         except asyncio.CancelledError:
             raise
+        finally:
+            await stop_progress_reporter()
         duration_sec = time.time() - start_time
 
         # 处理 gather 返回的异常
@@ -303,24 +364,32 @@ class ParallelHandler(ToolHandler):
             all_wrapped.append(wrapped)
 
         # 4.5) 批量写入文件（单次 I/O 操作）
+        save_file_written = False
         if all_wrapped:
             try:
                 # DESIGN: save_file 在 permission='read-only' 下允许写入是特性（用于保存并行输出），不是风险或越权。
-                file_path = Path(save_file)
-                file_path.parent.mkdir(parents=True, exist_ok=True)
+                save_file_path = Path(save_file)
+                if not save_file_path.is_absolute():
+                    workspace = Path(arguments.get("workspace", ""))
+                    save_file_path = workspace / save_file_path
+                save_file_path = save_file_path.expanduser().resolve()
+
+                save_file = str(save_file_path)
+                save_file_path.parent.mkdir(parents=True, exist_ok=True)
                 content_to_write = "\n".join(all_wrapped)
-                if file_path.exists():
-                    with file_path.open("a", encoding="utf-8") as f:
+                if save_file_path.exists():
+                    with save_file_path.open("a", encoding="utf-8") as f:
                         f.write("\n" + content_to_write)  # 前置换行防止粘连
                 else:
-                    file_path.write_text(content_to_write, encoding="utf-8")
+                    save_file_path.write_text(content_to_write, encoding="utf-8")
+                save_file_written = True
             except Exception as e:
-                logger.error(f"Failed to write to {save_file}: {e}", exc_info=True)
-                return format_error_response(f"Failed to write to {save_file}: {e}")
+                logger.warning(f"Failed to write to {save_file}: {e}", exc_info=True)
 
         # 5) 返回 wrapped 内容（与 save_file_with_wrapper 格式一致）
         summary = f"Parallel run: total={len(results)}, success={success_count}, failed={failed_count}, skipped={skipped_count}\n"
-        summary += f"Saved to: {save_file}\n"
+        if save_file_written:
+            summary += f"Saved to: {save_file}\n"
         summary += "\n".join(summary_lines)
 
         # 推送结果到 GUI
@@ -345,6 +414,7 @@ class ParallelHandler(ToolHandler):
                     "skipped_count": skipped_count,
                     "duration_sec": duration_sec,
                     "save_file": save_file,
+                    "save_file_written": save_file_written,
                 },
             },
         })

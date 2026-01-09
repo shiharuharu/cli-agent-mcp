@@ -419,7 +419,10 @@ BANANA_PROPERTIES = {
     },
     "save_path": {
         "type": "string",
-        "description": "Base directory for saving images. Files saved to {save_path}/{task_note}/.",
+        "description": (
+            "Output directory for saving images. Files are saved under this directory, "
+            "organized by task_note (prefix/subdirectory), e.g., {save_path}/{task_note}/."
+        ),
     },
 }
 
@@ -463,7 +466,10 @@ IMAGE_PROPERTIES = {
     },
     "save_path": {
         "type": "string",
-        "description": "Base directory for saving images. Files saved to {save_path}/{task_note}/.",
+        "description": (
+            "Output directory for saving images. Files are saved under this directory, "
+            "organized by task_note (prefix/subdirectory), e.g., {save_path}/{task_note}/."
+        ),
     },
     "api_type": {
         "type": "string",
@@ -583,9 +589,10 @@ def create_tool_schema(cli_type: str, is_parallel: bool = False) -> dict[str, An
         properties["task_note"] = {
             "type": "string",
             "description": (
-                "Subdirectory name for saving images (English recommended, e.g., 'hero-banner', 'product-shot'). "
-                "Must be a safe directory name: no '/', '\\\\', '..', or path separators. "
-                "Used in disk paths and also shown in GUI."
+                "Output file prefix / subdirectory name (English recommended, e.g., 'hero-banner', 'product-shot'). "
+                "Used to organize files under save_path (e.g., {save_path}/{task_note}/...). "
+                "Must be a safe name: no '/', '\\\\', '..', or path separators. "
+                "Also shown in GUI."
             ),
         }
         properties["debug"] = TAIL_PROPERTIES["debug"]
@@ -615,9 +622,10 @@ def create_tool_schema(cli_type: str, is_parallel: bool = False) -> dict[str, An
         properties["task_note"] = {
             "type": "string",
             "description": (
-                "Subdirectory name for saving images (English recommended, e.g., 'hero-banner', 'product-shot'). "
-                "Must be a safe directory name: no '/', '\\\\', '..', or path separators. "
-                "Used in disk paths and also shown in GUI."
+                "Output file prefix / subdirectory name (English recommended, e.g., 'hero-banner', 'product-shot'). "
+                "Used to organize files under save_path (e.g., {save_path}/{task_note}/...). "
+                "Must be a safe name: no '/', '\\\\', '..', or path separators. "
+                "Also shown in GUI."
             ),
         }
         properties["debug"] = TAIL_PROPERTIES["debug"]
@@ -643,6 +651,15 @@ def create_tool_schema(cli_type: str, is_parallel: bool = False) -> dict[str, An
                     "In parallel mode, this list is shared by all tasks."
                 ).strip()
                 properties[key] = shared
+            elif key == "permission":
+                perm = dict(value)
+                perm["description"] = (
+                    f"{value.get('description', '')}\n"
+                    "PARALLEL NOTE: For each parallel_continuation_ids[i], permission is still locked to that session. "
+                    "If you need to change permission for a resumed task, start a new session for that task "
+                    "(use empty string in parallel_continuation_ids[i])."
+                ).strip()
+                properties[key] = perm
             else:
                 properties[key] = value
         # parallel 模式下 model 改为数组类型

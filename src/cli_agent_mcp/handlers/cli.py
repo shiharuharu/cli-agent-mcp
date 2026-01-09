@@ -91,6 +91,18 @@ def normalize_path_arguments(cli_type: str, args: dict[str, Any]) -> dict[str, A
     return normalized
 
 
+def resolve_workspace_relative_path(workspace: Path, path_value: str) -> Path:
+    """将路径归一化为绝对路径。
+
+    - 支持 ~ 展开
+    - 相对路径以 workspace 为基准拼接
+    """
+    path = Path(path_value).expanduser()
+    if not path.is_absolute():
+        path = workspace / path
+    return path.resolve()
+
+
 def build_params(cli_type: str, args: dict[str, Any]):
     """构建 CLI 参数对象。"""
     args = normalize_path_arguments(cli_type, args)
@@ -243,6 +255,13 @@ class CLIHandler(ToolHandler):
             # 获取参数
             debug_enabled = ctx.resolve_debug(arguments)
             save_file_path = arguments.get("save_file", "")
+            resolved_save_file_path = ""
+            if save_file_path:
+                try:
+                    resolved_save_file_path = str(resolve_workspace_relative_path(params.workspace, save_file_path))
+                except Exception:
+                    # 保底：解析失败时保持原样
+                    resolved_save_file_path = save_file_path
 
             # 构建 debug_info（当 debug 开启时始终构建，包含 log_file）
             debug_info = None
@@ -256,7 +275,7 @@ class CLIHandler(ToolHandler):
                     output_tokens=result.debug_info.output_tokens if result.debug_info else None,
                     cancelled=result.cancelled,
                     log_file=ctx.config.log_file if ctx.config.log_debug else None,
-                    save_file=save_file_path or None,
+                    save_file=resolved_save_file_path or None,
                 )
 
             # 构建 ResponseData（直接使用 invoker 提取的统一数据）
@@ -293,7 +312,7 @@ class CLIHandler(ToolHandler):
             # 而非通用的文件写入能力。CLI agent 的实际文件操作仍受 permission 参数控制。
             # 这是一个便捷功能，让编排器无需单独写文件来保存分析结果。
             # DESIGN: save_file 在 permission='read-only' 下允许写入是特性（用于保存输出），不是风险或越权。
-            if save_file_path and result.success:
+            if resolved_save_file_path and result.success:
                 try:
                     file_content = formatter.format_for_file(response_data)
 
@@ -307,17 +326,22 @@ class CLIHandler(ToolHandler):
                         )
 
                     # 追加或覆盖
-                    file_path = Path(save_file_path)
-                    file_path.parent.mkdir(parents=True, exist_ok=True)
-                    if arguments.get("save_file_with_append_mode", False) and file_path.exists():
-                        with file_path.open("a", encoding="utf-8") as f:
+                    save_file_path = Path(resolved_save_file_path)
+                    if not save_file_path.is_absolute():
+                        workspace = Path(arguments.get("workspace", ""))
+                        save_file_path = workspace / save_file_path
+                    save_file_path = save_file_path.expanduser().resolve()
+
+                    save_file_path.parent.mkdir(parents=True, exist_ok=True)
+                    if arguments.get("save_file_with_append_mode", False) and save_file_path.exists():
+                        with save_file_path.open("a", encoding="utf-8") as f:
                             f.write("\n" + file_content)
                         logger.info(f"Appended output to: {save_file_path}")
                     else:
-                        file_path.write_text(file_content, encoding="utf-8")
+                        save_file_path.write_text(file_content, encoding="utf-8")
                         logger.info(f"Saved output to: {save_file_path}")
                 except Exception as e:
-                    logger.warning(f"Failed to save output to {save_file_path}: {e}")
+                    logger.warning(f"Failed to save output to {resolved_save_file_path}: {e}")
 
             await stop_progress_reporter()
 

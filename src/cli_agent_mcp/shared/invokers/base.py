@@ -959,25 +959,32 @@ class CLIInvoker(ABC):
 
         finally:
             # DEBUG: 无论正常结束、取消还是异常，统一输出调试信息
-            try:
-                stderr_content = b"".join(stderr_chunks).decode("utf-8", errors="replace")
-                stdout_content = "\n".join(stdout_lines_raw)
-                process_pid = self._process.pid if self._process else "N/A"
-                return_code = self._process.returncode if self._process else "N/A"
-                logger.debug(
-                    f"[SUBPROCESS] Exit: pid={process_pid}\n"
-                    f"  Return code: {return_code}\n"
-                    f"  Stdout lines: {len(stdout_lines_raw)}\n"
-                    f"  Stderr size: {len(stderr_content)} chars\n"
-                    f"  Captured errors: {len(self._captured_errors)}\n"
-                    f"  Fatal error: {fatal_error_event.is_set()}"
-                )
-                if stdout_content.strip():
-                    logger.debug(f"[SUBPROCESS] Stdout:\n{stdout_content}")
-                if stderr_content.strip():
-                    logger.debug(f"[SUBPROCESS] Stderr:\n{stderr_content}")
-            except Exception as e:
-                logger.debug(f"[SUBPROCESS] Debug info error: {e}")
+            if logger.isEnabledFor(logging.DEBUG):
+                try:
+                    stderr_content = b"".join(stderr_chunks).decode("utf-8", errors="replace")
+                    stdout_content = "\n".join(stdout_lines_raw) if stdout_lines_raw else ""
+                    process_pid = self._process.pid if self._process else "N/A"
+                    return_code = self._process.returncode if self._process else "N/A"
+                    logger.debug(
+                        "[SUBPROCESS] Exit: pid=%s\n"
+                        "  Return code: %s\n"
+                        "  Stdout lines: %s\n"
+                        "  Stderr size: %s chars\n"
+                        "  Captured errors: %s\n"
+                        "  Fatal error: %s",
+                        process_pid,
+                        return_code,
+                        len(stdout_lines_raw) if stdout_lines_raw else 0,
+                        len(stderr_content),
+                        len(self._captured_errors),
+                        fatal_error_event.is_set(),
+                    )
+                    if stdout_content.strip():
+                        logger.debug("[SUBPROCESS] Stdout:\n%s", stdout_content)
+                    if stderr_content.strip():
+                        logger.debug("[SUBPROCESS] Stderr:\n%s", stderr_content)
+                except Exception as e:
+                    logger.debug("[SUBPROCESS] Debug info error: %s", e)
 
             # 确保 stderr task 被取消
             if not stderr_task.done():
@@ -989,7 +996,7 @@ class CLIInvoker(ABC):
 
             # 确保子进程被终止（防止孤儿进程）
             if self._process is not None and self._process.returncode is None:
-                logger.debug(f"Terminating subprocess pid={self._process.pid}")
+                logger.debug("Terminating subprocess pid=%s", self._process.pid)
                 await self._terminate_subprocess()
 
             self._process = None
