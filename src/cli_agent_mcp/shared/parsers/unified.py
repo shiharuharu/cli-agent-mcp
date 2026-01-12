@@ -12,6 +12,7 @@ cli-agent-mcp shared/parsers v0.1.0
 
 from __future__ import annotations
 
+import json
 import time
 import uuid
 from typing import Any, Literal
@@ -187,7 +188,14 @@ def make_fallback_event(
         severity = "debug"
 
     # 从 raw 提取 message，或使用默认
-    final_message = message or raw.get("message") or f"Unknown event type: {event_type}"
+    candidate_message = message or raw.get("message") or f"Unknown event type: {event_type}"
+    if isinstance(candidate_message, str):
+        final_message = candidate_message
+    else:
+        try:
+            final_message = json.dumps(candidate_message, ensure_ascii=False, default=str)
+        except Exception:
+            final_message = str(candidate_message)
 
     # 如果有明确的 severity/message，说明这是合成事件而非未知事件
     is_fallback = raw.get("severity") is None and raw.get("message") is None

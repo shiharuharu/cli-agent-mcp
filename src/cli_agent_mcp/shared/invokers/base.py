@@ -845,7 +845,19 @@ class CLIInvoker(ABC):
                             continue
 
                         # 解析为统一事件
-                        events = self._parse_raw_data(parser, data)
+                        try:
+                            events = self._parse_raw_data(parser, data)
+                        except asyncio.CancelledError:
+                            raise
+                        except Exception as e:
+                            # 解析异常不应中断整个流：记录原始行并继续
+                            logger.warning(
+                                "[PARSE ERROR] %s failed to parse stdout line: %s\nRaw line: %s",
+                                self.cli_name,
+                                e,
+                                decoded,
+                            )
+                            continue
                         for event in events:
                             # 标记已收到首次有效事件（忽略 lifecycle 事件如 turn_start）
                             if not first_event_received and event.category.value != "lifecycle":
@@ -958,6 +970,23 @@ class CLIInvoker(ABC):
             self._check_execution_errors(stderr_content)
 
         finally:
+            # 当出现错误/异常/非零退出码时，用 WARNING 级别记录 stdout（不受 DEBUG 限制）
+            try:
+                exc_type, _, _ = sys.exc_info()
+                exit_code = self._process.returncode if self._process else None
+                had_error = (
+                    exc_type is not None
+                    or fatal_error_event.is_set()
+                    or self._exit_error is not None
+                    or (isinstance(exit_code, int) and exit_code != 0)
+                )
+                if had_error and stdout_lines_raw:
+                    stdout_content = "\n".join(stdout_lines_raw)
+                    if stdout_content.strip():
+                        logger.warning("[SUBPROCESS] Stdout (on error):\n%s", stdout_content)
+            except Exception as e:
+                logger.debug("[SUBPROCESS] Stdout warning-log error: %s", e)
+
             # DEBUG: 无论正常结束、取消还是异常，统一输出调试信息
             if logger.isEnabledFor(logging.DEBUG):
                 try:
