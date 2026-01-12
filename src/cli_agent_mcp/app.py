@@ -228,10 +228,13 @@ def main() -> None:
         log_handlers.append(stderr_handler)
         log_level = logging.INFO
 
+    # 配置 root logger（第三方库）为 WARNING，减少噪音
     logging.basicConfig(
-        level=log_level,
+        level=logging.WARNING,
         handlers=log_handlers,
     )
+    # 只对 cli_agent_mcp 命名空间启用详细日志
+    logging.getLogger("cli_agent_mcp").setLevel(log_level)
 
     asyncio.run(run_server())
 
