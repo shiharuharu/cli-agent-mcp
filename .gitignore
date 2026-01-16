@@ -69,6 +69,7 @@ Thumbs.db
 
 # Local development
 .claude/
+.agent-handoff/
 *.local
 *.local.*
 

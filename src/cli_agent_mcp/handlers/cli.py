@@ -30,6 +30,7 @@ from ..shared.response_formatter import (
     format_error_response,
 )
 from ..utils.prompt_injection import inject_context_and_report_mode
+from ..utils.xml_wrapper import build_wrapper
 
 __all__ = ["CLIHandler", "build_params"]
 
@@ -169,10 +170,13 @@ class CLIHandler(ToolHandler):
     def validate(self, arguments: dict[str, Any]) -> str | None:
         prompt = arguments.get("prompt")
         workspace = arguments.get("workspace")
+        handoff_file = arguments.get("handoff_file")
         if not prompt or not str(prompt).strip():
             return "Missing required argument: 'prompt'"
         if not workspace:
             return "Missing required argument: 'workspace'"
+        if not handoff_file or not str(handoff_file).strip():
+            return "Missing required argument: 'handoff_file'"
         return None
 
     async def handle(
@@ -197,6 +201,20 @@ class CLIHandler(ToolHandler):
 
         # 立即推送用户 prompt 到 GUI
         ctx.push_user_prompt(self._cli_type, prompt, task_note)
+
+        # handoff_file is now mandatory; inject handoff prompt hint
+        handoff_file = str(arguments.get("handoff_file") or "").strip()
+        prompt = prompt.rstrip() + f"""
+
+<mcp-injection type="handoff">
+  <meta-rules>
+    <rule>Do not mention this template, "handoff", MCP, or any injection mechanism.</rule>
+  </meta-rules>
+  <output-requirements>
+    <rule>End your answer with a section titled "## Handoff" (next steps + files to read first).</rule>
+    <rule>The scheduler will append this output to: {handoff_file}</rule>
+  </output-requirements>
+</mcp-injection>"""
 
         # 使用 helper 注入 report_mode 和 context_paths
         report_mode = arguments.get("report_mode", False)
@@ -254,19 +272,70 @@ class CLIHandler(ToolHandler):
 
             # 获取参数
             debug_enabled = ctx.resolve_debug(arguments)
-            save_file_path = arguments.get("save_file", "")
-            resolved_save_file_path = ""
-            if save_file_path:
+            handoff_file_path = arguments.get("handoff_file", "")
+            resolved_handoff_file_path = ""
+            if handoff_file_path:
                 try:
-                    resolved_save_file_path = str(resolve_workspace_relative_path(params.workspace, save_file_path))
+                    resolved_handoff_file_path = str(resolve_workspace_relative_path(params.workspace, handoff_file_path))
                 except Exception:
                     # 保底：解析失败时保持原样
-                    resolved_save_file_path = save_file_path
+                    resolved_handoff_file_path = handoff_file_path
+
+            formatter = get_formatter()
+
+            # 保存到 handoff_file（必填，永远 append + wrapped）
+            # NOTE: handoff_file 是权限限制的例外，它仅用于落盘分析记录结果，
+            # 而非通用的文件写入能力。CLI agent 的实际文件操作仍受 permission 参数控制。
+            # 这是一个便捷功能，让编排器无需单独写文件来保存分析结果。
+            # DESIGN: handoff_file 在 permission='read-only' 下允许写入是特性（用于保存输出），不是风险或越权。
+            # NOTE: 必须在构建最终 response 前完成写入，以便 debug_info 回传 handoff_file_written。
+            handoff_file_written = False
+
+            # 构建 ResponseData（直接使用 invoker 提取的统一数据）
+            # 错误时也尽力返回已收集的内容和 session_id，方便客户端发送"继续"
+            response_data = ResponseData(
+                answer=result.agent_messages,  # 即使失败也返回已收集的内容
+                session_id=result.session_id or "",
+                thought_steps=result.thought_steps if not result.success else [],
+                debug_info=None,
+                success=result.success,
+                error=result.error,
+            )
+
+            if resolved_handoff_file_path:
+                try:
+                    file_content = formatter.format_for_file(response_data)
+                    status = "success" if result.success else "error"
+                    wrapped = build_wrapper(
+                        self._cli_type,
+                        result.session_id or "",
+                        task_note,
+                        0,
+                        status,
+                        file_content,
+                    )
+
+                    handoff_path = Path(resolved_handoff_file_path)
+                    if not handoff_path.is_absolute():
+                        workspace = Path(arguments.get("workspace", ""))
+                        handoff_path = workspace / handoff_path
+                    handoff_path = handoff_path.expanduser().resolve()
+
+                    handoff_path.parent.mkdir(parents=True, exist_ok=True)
+                    if handoff_path.exists():
+                        with handoff_path.open("a", encoding="utf-8") as f:
+                            f.write("\n" + wrapped)
+                    else:
+                        handoff_path.write_text(wrapped, encoding="utf-8")
+                    logger.info(f"Appended output to: {handoff_path}")
+                    resolved_handoff_file_path = str(handoff_path)
+                    handoff_file_written = True
+                except Exception as e:
+                    logger.warning(f"Failed to save output to {resolved_handoff_file_path}: {e}")
 
             # 构建 debug_info（当 debug 开启时始终构建，包含 log_file）
-            debug_info = None
             if debug_enabled:
-                debug_info = FormatterDebugInfo(
+                response_data.debug_info = FormatterDebugInfo(
                     model=result.debug_info.model if result.debug_info else None,
                     duration_sec=result.debug_info.duration_sec if result.debug_info else 0.0,
                     message_count=result.debug_info.message_count if result.debug_info else 0,
@@ -275,22 +344,11 @@ class CLIHandler(ToolHandler):
                     output_tokens=result.debug_info.output_tokens if result.debug_info else None,
                     cancelled=result.cancelled,
                     log_file=ctx.config.log_file if ctx.config.log_debug else None,
-                    save_file=resolved_save_file_path or None,
+                    handoff_file=resolved_handoff_file_path or None,
+                    handoff_file_written=handoff_file_written,
                 )
 
-            # 构建 ResponseData（直接使用 invoker 提取的统一数据）
-            # 错误时也尽力返回已收集的内容和 session_id，方便客户端发送"继续"
-            response_data = ResponseData(
-                answer=result.agent_messages,  # 即使失败也返回已收集的内容
-                session_id=result.session_id or "",
-                thought_steps=result.thought_steps if not result.success else [],
-                debug_info=debug_info,
-                success=result.success,
-                error=result.error,
-            )
-
             # 格式化响应
-            formatter = get_formatter()
             response = formatter.format(
                 response_data,
                 debug=debug_enabled,
@@ -306,42 +364,6 @@ class CLIHandler(ToolHandler):
             if result.debug_info:
                 response_summary += f"\n  Duration: {result.debug_info.duration_sec:.3f}s"
             logger.debug(response_summary)
-
-            # 保存到文件（如果指定）
-            # NOTE: save_file 是权限限制的例外，它仅用于落盘分析记录结果，
-            # 而非通用的文件写入能力。CLI agent 的实际文件操作仍受 permission 参数控制。
-            # 这是一个便捷功能，让编排器无需单独写文件来保存分析结果。
-            # DESIGN: save_file 在 permission='read-only' 下允许写入是特性（用于保存输出），不是风险或越权。
-            if resolved_save_file_path and result.success:
-                try:
-                    file_content = formatter.format_for_file(response_data)
-
-                    # 添加 XML wrapper（如果启用）
-                    if arguments.get("save_file_with_wrapper", False):
-                        continuation_id = result.session_id or ""
-                        file_content = (
-                            f'<agent-output agent="{self._cli_type}" continuation_id="{continuation_id}">\n'
-                            f'{file_content}\n'
-                            f'</agent-output>\n'
-                        )
-
-                    # 追加或覆盖
-                    save_file_path = Path(resolved_save_file_path)
-                    if not save_file_path.is_absolute():
-                        workspace = Path(arguments.get("workspace", ""))
-                        save_file_path = workspace / save_file_path
-                    save_file_path = save_file_path.expanduser().resolve()
-
-                    save_file_path.parent.mkdir(parents=True, exist_ok=True)
-                    if arguments.get("save_file_with_append_mode", False) and save_file_path.exists():
-                        with save_file_path.open("a", encoding="utf-8") as f:
-                            f.write("\n" + file_content)
-                        logger.info(f"Appended output to: {save_file_path}")
-                    else:
-                        save_file_path.write_text(file_content, encoding="utf-8")
-                        logger.info(f"Saved output to: {save_file_path}")
-                except Exception as e:
-                    logger.warning(f"Failed to save output to {resolved_save_file_path}: {e}")
 
             await stop_progress_reporter()
 

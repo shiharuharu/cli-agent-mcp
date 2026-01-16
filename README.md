@@ -16,7 +16,7 @@ This is more than a CLI wrapper — it's an **orchestration pattern** for multi-
 - **Claude**: The scribe. Faithful execution, clear documentation, turning ideas into working code.
 - **Banana**: The artist. High-fidelity image generation for UI mockups, product visuals, and creative assets.
 
-**Want persistent results?** Use `save_file` to capture agent outputs, then let Claude synthesize insights across multiple analyses.
+**Want persistent results?** Use `handoff_file` to capture agent outputs, then let Claude synthesize insights across multiple analyses.
 
 We don't just wrap CLIs — we provide a **thinking framework** for human-AI collaboration.
 
@@ -76,13 +76,11 @@ Invoke OpenAI Codex CLI agent for deep code analysis and critical review.
 |-----------|------|----------|---------|-------------|
 | `prompt` | string | ✓ | - | Task instruction for the agent |
 | `workspace` | string | ✓ | - | Absolute path to the project directory |
+| `handoff_file` | string | ✓ | - | REQUIRED. Server-side append-only output capture (always wrapped in `<agent-output ...>`) |
 | `continuation_id` | string | | `""` | Pass from previous response to continue conversation |
 | `permission` | string | | `read-only` | Permission level: `read-only`, `workspace-write`, `unlimited` |
 | `model` | string | | `""` | Model override (only specify if explicitly requested) |
-| `save_file` | string | | `""` | PREFERRED for large outputs. Writes directly to file, avoiding context overflow |
 | `report_mode` | boolean | | `false` | Generate standalone report format |
-| `save_file_with_wrapper` | boolean | | `false` | Wrap output with `<agent-output>` XML tags |
-| `save_file_with_append_mode` | boolean | | `false` | Append to file instead of overwriting |
 | `verbose_output` | boolean | | `false` | Return detailed output including reasoning |
 | `context_paths` | array | | `[]` | Reference file/directory paths to provide context |
 | `image` | array | | `[]` | Absolute paths to image files for visual context |
@@ -99,13 +97,11 @@ Invoke Google Gemini CLI agent for UI design and comprehensive analysis.
 |-----------|------|----------|---------|-------------|
 | `prompt` | string | ✓ | - | Task instruction for the agent |
 | `workspace` | string | ✓ | - | Absolute path to the project directory |
+| `handoff_file` | string | ✓ | - | REQUIRED. Server-side append-only output capture (always wrapped in `<agent-output ...>`) |
 | `continuation_id` | string | | `""` | Pass from previous response to continue conversation |
 | `permission` | string | | `read-only` | Permission level: `read-only`, `workspace-write`, `unlimited` |
 | `model` | string | | `""` | Model override |
-| `save_file` | string | | `""` | PREFERRED for large outputs. Writes directly to file, avoiding context overflow |
 | `report_mode` | boolean | | `false` | Generate standalone report format |
-| `save_file_with_wrapper` | boolean | | `false` | Wrap output with `<agent-output>` XML tags |
-| `save_file_with_append_mode` | boolean | | `false` | Append to file instead of overwriting |
 | `verbose_output` | boolean | | `false` | Return detailed output including reasoning |
 | `context_paths` | array | | `[]` | Reference file/directory paths to provide context |
 | `task_note` | string | | `""` | Display label for GUI |
@@ -121,13 +117,11 @@ Invoke Anthropic Claude CLI agent for code implementation.
 |-----------|------|----------|---------|-------------|
 | `prompt` | string | ✓ | - | Task instruction for the agent |
 | `workspace` | string | ✓ | - | Absolute path to the project directory |
+| `handoff_file` | string | ✓ | - | REQUIRED. Server-side append-only output capture (always wrapped in `<agent-output ...>`) |
 | `continuation_id` | string | | `""` | Pass from previous response to continue conversation |
 | `permission` | string | | `read-only` | Permission level: `read-only`, `workspace-write`, `unlimited` |
 | `model` | string | | `""` | Model override (`sonnet`, `opus`, or full model name) |
-| `save_file` | string | | `""` | PREFERRED for large outputs. Writes directly to file, avoiding context overflow |
 | `report_mode` | boolean | | `false` | Generate standalone report format |
-| `save_file_with_wrapper` | boolean | | `false` | Wrap output with `<agent-output>` XML tags |
-| `save_file_with_append_mode` | boolean | | `false` | Append to file instead of overwriting |
 | `verbose_output` | boolean | | `false` | Return detailed output including reasoning |
 | `context_paths` | array | | `[]` | Reference file/directory paths to provide context |
 | `system_prompt` | string | | `""` | Complete replacement for the default system prompt |
@@ -146,13 +140,11 @@ Invoke OpenCode CLI agent for full-stack development.
 |-----------|------|----------|---------|-------------|
 | `prompt` | string | ✓ | - | Task instruction for the agent |
 | `workspace` | string | ✓ | - | Absolute path to the project directory |
+| `handoff_file` | string | ✓ | - | REQUIRED. Server-side append-only output capture (always wrapped in `<agent-output ...>`) |
 | `continuation_id` | string | | `""` | Pass from previous response to continue conversation |
 | `permission` | string | | `read-only` | Permission level: `read-only`, `workspace-write`, `unlimited` |
 | `model` | string | | `""` | Model override (format: `provider/model`) |
-| `save_file` | string | | `""` | PREFERRED for large outputs. Writes directly to file, avoiding context overflow |
 | `report_mode` | boolean | | `false` | Generate standalone report format |
-| `save_file_with_wrapper` | boolean | | `false` | Wrap output with `<agent-output>` XML tags |
-| `save_file_with_append_mode` | boolean | | `false` | Append to file instead of overwriting |
 | `verbose_output` | boolean | | `false` | Return detailed output including reasoning |
 | `context_paths` | array | | `[]` | Reference file/directory paths to provide context |
 | `file` | array | | `[]` | Absolute paths to files to attach |
@@ -229,7 +221,7 @@ Some parameters automatically inject additional content into the prompt using `<
 
 ### `report_mode`
 
-When `save_file` and `report_mode` are both set, output format requirements are injected:
+When `report_mode` is set, output format requirements are injected:
 
 ```xml
 <your prompt>
@@ -281,35 +273,32 @@ If your request references prior context (e.g., "fix that bug", "continue the wo
 1. Provide `continuation_id` from a previous response, OR
 2. Expand the reference into concrete details
 
-## File Output Options
+## Handoff File
 
-### `save_file_with_wrapper`
+`handoff_file` is REQUIRED for all CLI tools. The server appends each tool output to this file after execution.
 
-When enabled, output is wrapped with XML tags containing metadata:
+Behavior (always):
+- Append-only (never overwrite)
+- Wrapped as `<agent-output ...>` with `agent`, `continuation_id`, `task_note`, `task_index`, `status`
+- `task_index`: single task = `0`; parallel tasks = `1..N`
+- On failure, still appends with `status="error"` and an `Error: ...` message
+
+Safety notes:
+- Avoid concurrent writes to the same path (outputs may interleave)
+- Avoid double-write conflict: do NOT point `handoff_file` at a file the agent is asked to edit
+- Recommended: use `.agent-handoff/` (e.g., `.agent-handoff/handoff_chain.md`)
+
+Example wrapper:
 
 ```
-<agent-output agent="gemini" continuation_id="abc123">
-... agent response ...
+<agent-output agent="gemini" continuation_id="abc123" task_note="UI audit" task_index="0" status="success">
+... agent response (Markdown) ...
 </agent-output>
 ```
 
-### `save_file_with_append_mode`
+### Migration: `save_file` → `handoff_file`
 
-When enabled, new output is appended to existing file instead of overwriting. Combined with `save_file_with_wrapper`, enables multi-agent collaboration:
-
-```
-<agent-output agent="codex" continuation_id="...">
-Critical analysis of the codebase...
-</agent-output>
-
-<agent-output agent="gemini" continuation_id="...">
-Creative suggestions for improvement...
-</agent-output>
-
-<agent-output agent="claude" continuation_id="...">
-Implementation summary...
-</agent-output>
-```
+`save_file`, `save_file_with_wrapper`, and `save_file_with_append_mode` were removed. Use `handoff_file` instead (required; always append; always wrapper).
 
 ## Response Format
 

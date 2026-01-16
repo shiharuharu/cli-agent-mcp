@@ -40,7 +40,9 @@ NO SHARED MEMORY:
 
 CROSS-AGENT HANDOFF:
 - Small data: paste into prompt.
-- Large data: save_file -> context_paths -> prompt says "Read <file>".
+- Step 1 (write): provide handoff_file so this tool appends its output as <agent-output ...>.
+- Step 2 (read): in a later call, pass that file via context_paths and explicitly instruct the agent what to read.
+- The handoff file contains multiple <agent-output ...> blocks; when it grows, read only the last N blocks or filter by task_note/task_index.
 
 CAPABILITIES:
 - Strongest deep analysis and reflection abilities
@@ -62,7 +64,9 @@ NO SHARED MEMORY:
 
 CROSS-AGENT HANDOFF:
 - Small data: paste into prompt.
-- Large data: save_file -> context_paths -> prompt says "Read <file>".
+- Step 1 (write): provide handoff_file so this tool appends its output as <agent-output ...>.
+- Step 2 (read): in a later call, pass that file via context_paths and explicitly instruct the agent what to read.
+- The handoff file contains multiple <agent-output ...> blocks; when it grows, read only the last N blocks or filter by task_note/task_index.
 
 CAPABILITIES:
 - Strongest UI design and image understanding abilities
@@ -82,7 +86,9 @@ NO SHARED MEMORY:
 
 CROSS-AGENT HANDOFF:
 - Small data: paste into prompt.
-- Large data: save_file -> context_paths -> prompt says "Read <file>".
+- Step 1 (write): provide handoff_file so this tool appends its output as <agent-output ...>.
+- Step 2 (read): in a later call, pass that file via context_paths and explicitly instruct the agent what to read.
+- The handoff file contains multiple <agent-output ...> blocks; when it grows, read only the last N blocks or filter by task_note/task_index.
 
 CAPABILITIES:
 - Strongest code writing and implementation abilities
@@ -104,7 +110,9 @@ NO SHARED MEMORY:
 
 CROSS-AGENT HANDOFF:
 - Small data: paste into prompt.
-- Large data: save_file -> context_paths -> prompt says "Read <file>".
+- Step 1 (write): provide handoff_file so this tool appends its output as <agent-output ...>.
+- Step 2 (read): in a later call, pass that file via context_paths and explicitly instruct the agent what to read.
+- The handoff file contains multiple <agent-output ...> blocks; when it grows, read only the last N blocks or filter by task_note/task_index.
 
 CAPABILITIES:
 - Excellent at rapid prototyping and development tasks
@@ -214,34 +222,34 @@ COMMON_PROPERTIES = {
         "default": "",
         "description": "Optional model override (e.g., 'gemini-2.5-pro'). Use only if specifically requested.",
     },
-    "save_file": {
+    "handoff_file": {
         "type": "string",
+        "minLength": 1,
         "description": (
-            "Save the tool's final response to this file (server-side) to avoid truncation and create a reusable artifact. "
-            "Use for: code review / architecture / performance / security analysis, long-form reports/docs/summaries, "
-            "or when another agent/run will read the output via context_paths. "
-            "Do NOT use for: short answers, or when permission=workspace-write and the primary deliverable "
-            "is repo file edits (let the agent write files directly). "
-            "Paths can be absolute or workspace-relative. "
-            "Non-parallel tools: written only on success. "
-            "*_parallel: REQUIRED; appends one <agent-output agent=... task_note=... task_index=... status=...> wrapper per task. "
-            "Examples: 'artifacts/reports/code-review.md', 'artifacts/reports/architecture.md'."
-        ),
-    },
-    "save_file_with_wrapper": {
-        "type": "boolean",
-        "default": False,
-        "description": (
-            "When true AND save_file is set, wrap output in <agent-output> XML tags "
-            "with metadata (agent name, continuation_id). For multi-agent assembly."
-        ),
-    },
-    "save_file_with_append_mode": {
-        "type": "boolean",
-        "default": False,
-        "description": (
-            "When true AND save_file is set, append instead of overwrite. "
-            "For multi-agent collaboration on same document."
+            "REQUIRED. Append the tool's output to this file (server-side).\n\n"
+            "WHAT IT DOES:\n"
+            "- After execution completes, appends ONE <agent-output ...> block to this file.\n"
+            "- The inner payload is plain Markdown (formatted for disk), NOT the tool's <response> XML.\n"
+            "- Captures 'what the agent replied', NOT 'what files the agent edited'.\n"
+            "- This does NOT instruct the agent to create/edit that file.\n\n"
+            "DEFAULT BEHAVIOR (ALWAYS):\n"
+            "- Append mode (never overwrite)\n"
+            "- Wrapped with <agent-output> XML (agent, continuation_id, task_note, task_index, status)\n\n"
+            "TASK INDEX CONVENTION:\n"
+            "- Single task: task_index=0\n"
+            "- Parallel tasks: task_index=1..N\n\n"
+            "FAILURE BEHAVIOR:\n"
+            "- Failures still append with status=\"error\" and a Markdown error message (prefixed with 'Error:').\n\n"
+            "CRITICAL - DOUBLE-WRITE CONFLICT:\n"
+            "- Do NOT set handoff_file to any path the prompt asks the agent to create/modify.\n"
+            "- Mixing 'agent edits file' + 'handoff_file writes to same path' causes corruption.\n"
+            "- Choose ONE writer per path: either agent edits OR handoff_file captures.\n\n"
+            "CRITICAL - CONCURRENT WRITES:\n"
+            "- Avoid multiple requests writing to the same handoff_file at the same time; outputs may interleave.\n"
+            "- Prefer unique per-run files, or serialize calls per handoff_file.\n\n"
+            "RECOMMENDED:\n"
+            "- Use '.agent-handoff/' directory (e.g., '.agent-handoff/handoff_chain.md').\n\n"
+            "Paths: absolute or workspace-relative."
         ),
     },
     "report_mode": {
@@ -563,8 +571,8 @@ def create_tool_schema(cli_type: str, is_parallel: bool = False) -> dict[str, An
     """创建工具的 JSON Schema。
 
     参数顺序：
-    1. prompt, workspace (必填) - parallel 模式下 prompt 被忽略
-    2. continuation_id, permission, model, save_file (常用)
+    1. prompt, workspace, handoff_file (必填)
+    2. continuation_id, permission, model (常用)
     3. 特有参数 (image / system_prompt / append_system_prompt / file / agent / images)
     4. parallel 参数 (仅 parallel 模式)
     5. task_note, debug (末尾)
@@ -639,10 +647,10 @@ def create_tool_schema(cli_type: str, is_parallel: bool = False) -> dict[str, An
     properties = {}
 
     # 1. 公共参数（必填 + 常用）
-    # parallel 模式下排除 prompt, continuation_id, save_file_with_append_mode, save_file_with_wrapper, model
+    # parallel 模式下排除 prompt, continuation_id, model
     if is_parallel:
         for key, value in COMMON_PROPERTIES.items():
-            if key in ("prompt", "continuation_id", "save_file_with_append_mode", "save_file_with_wrapper", "model"):
+            if key in ("prompt", "continuation_id", "model"):
                 continue
             if key == "context_paths":
                 shared = dict(value)
@@ -696,9 +704,9 @@ def create_tool_schema(cli_type: str, is_parallel: bool = False) -> dict[str, An
 
     # 构建 required 字段
     if is_parallel:
-        required = ["workspace", "save_file", "parallel_prompts", "parallel_task_notes"]
+        required = ["workspace", "handoff_file", "parallel_prompts", "parallel_task_notes"]
     else:
-        required = ["prompt", "workspace"]
+        required = ["prompt", "workspace", "handoff_file"]
 
     return {
         "type": "object",

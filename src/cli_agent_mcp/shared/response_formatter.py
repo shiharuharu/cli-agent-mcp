@@ -29,7 +29,8 @@ class DebugInfo:
     output_tokens: int | None = None
     cancelled: bool = False
     log_file: str | None = None  # DEBUG 日志文件路径
-    save_file: str | None = None  # 输出保存文件路径
+    handoff_file: str | None = None  # 输出保存文件路径
+    handoff_file_written: bool | None = None  # 是否成功写入 handoff_file
 
     def to_dict(self) -> dict[str, Any]:
         """转换为字典。"""
@@ -47,8 +48,10 @@ class DebugInfo:
             data["cancelled"] = True
         if self.log_file:
             data["log_file"] = self.log_file
-        if self.save_file:
-            data["save_file"] = self.save_file
+        if self.handoff_file:
+            data["handoff_file"] = self.handoff_file
+        if self.handoff_file_written is not None:
+            data["handoff_file_written"] = self.handoff_file_written
         return data
 
 
@@ -201,8 +204,11 @@ class ResponseFormatter:
             lines.append("    <cancelled>true</cancelled>")
         if debug_info.log_file:
             lines.append(f"    <log_file>{debug_info.log_file}</log_file>")
-        if debug_info.save_file:
-            lines.append(f"    <save_file>{debug_info.save_file}</save_file>")
+        if debug_info.handoff_file:
+            lines.append(f"    <handoff_file>{debug_info.handoff_file}</handoff_file>")
+        if debug_info.handoff_file_written is not None:
+            flag = "true" if debug_info.handoff_file_written else "false"
+            lines.append(f"    <handoff_file_written>{flag}</handoff_file_written>")
         lines.append("  </debug_info>")
         return "\n".join(lines)
 

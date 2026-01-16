@@ -52,8 +52,8 @@ class ParallelHandler(ToolHandler):
     def description(self) -> str:
         return (
             f"Run multiple {self._base_name} tasks in parallel. "
-            f"All tasks share workspace/permission/save_file. "
-            f"Results are appended to save_file with XML wrappers "
+            f"All tasks share workspace/permission/handoff_file. "
+            f"Results are appended to handoff_file with XML wrappers "
             f"(<agent-output agent=... continuation_id=... task_note=... task_index=... status=...>)."
         )
 
@@ -121,8 +121,8 @@ class ParallelHandler(ToolHandler):
                 if not isinstance(p, str):
                     return f"context_paths_parallel[{i}][{j}] must be a string"
 
-        if not arguments.get("save_file"):
-            return "save_file is required in parallel mode"
+        if not arguments.get("handoff_file"):
+            return "handoff_file is required in parallel mode"
 
         return None
 
@@ -141,13 +141,13 @@ class ParallelHandler(ToolHandler):
 
         prompts = arguments.get("parallel_prompts", [])
         task_notes = arguments.get("parallel_task_notes", [])
-        save_file_raw = arguments.get("save_file") or ""
+        handoff_file_raw = arguments.get("handoff_file") or ""
         workspace_raw = arguments.get("workspace") or ""
         workspace = Path(workspace_raw)
-        save_file = (
-            str(resolve_workspace_relative_path(workspace, save_file_raw))
-            if save_file_raw
-            else save_file_raw
+        handoff_file = (
+            str(resolve_workspace_relative_path(workspace, handoff_file_raw))
+            if handoff_file_raw
+            else handoff_file_raw
         )
 
         # clamp concurrency (handle string/invalid types)
@@ -364,32 +364,32 @@ class ParallelHandler(ToolHandler):
             all_wrapped.append(wrapped)
 
         # 4.5) 批量写入文件（单次 I/O 操作）
-        save_file_written = False
+        handoff_file_written = False
         if all_wrapped:
             try:
-                # DESIGN: save_file 在 permission='read-only' 下允许写入是特性（用于保存并行输出），不是风险或越权。
-                save_file_path = Path(save_file)
-                if not save_file_path.is_absolute():
+                # DESIGN: handoff_file 在 permission='read-only' 下允许写入是特性（用于保存并行输出），不是风险或越权。
+                handoff_file_path = Path(handoff_file)
+                if not handoff_file_path.is_absolute():
                     workspace = Path(arguments.get("workspace", ""))
-                    save_file_path = workspace / save_file_path
-                save_file_path = save_file_path.expanduser().resolve()
+                    handoff_file_path = workspace / handoff_file_path
+                handoff_file_path = handoff_file_path.expanduser().resolve()
 
-                save_file = str(save_file_path)
-                save_file_path.parent.mkdir(parents=True, exist_ok=True)
+                handoff_file = str(handoff_file_path)
+                handoff_file_path.parent.mkdir(parents=True, exist_ok=True)
                 content_to_write = "\n".join(all_wrapped)
-                if save_file_path.exists():
-                    with save_file_path.open("a", encoding="utf-8") as f:
+                if handoff_file_path.exists():
+                    with handoff_file_path.open("a", encoding="utf-8") as f:
                         f.write("\n" + content_to_write)  # 前置换行防止粘连
                 else:
-                    save_file_path.write_text(content_to_write, encoding="utf-8")
-                save_file_written = True
+                    handoff_file_path.write_text(content_to_write, encoding="utf-8")
+                handoff_file_written = True
             except Exception as e:
-                logger.warning(f"Failed to write to {save_file}: {e}", exc_info=True)
+                logger.warning(f"Failed to write to {handoff_file}: {e}", exc_info=True)
 
-        # 5) 返回 wrapped 内容（与 save_file_with_wrapper 格式一致）
+        # 5) 返回 wrapped 内容
         summary = f"Parallel run: total={len(results)}, success={success_count}, failed={failed_count}, skipped={skipped_count}\n"
-        if save_file_written:
-            summary += f"Saved to: {save_file}\n"
+        if handoff_file_written:
+            summary += f"Saved to: {handoff_file}\n"
         summary += "\n".join(summary_lines)
 
         # 推送结果到 GUI
@@ -413,8 +413,8 @@ class ParallelHandler(ToolHandler):
                     "failed_count": failed_count,
                     "skipped_count": skipped_count,
                     "duration_sec": duration_sec,
-                    "save_file": save_file,
-                    "save_file_written": save_file_written,
+                    "handoff_file": handoff_file,
+                    "handoff_file_written": handoff_file_written,
                 },
             },
         })
@@ -428,10 +428,11 @@ class ParallelHandler(ToolHandler):
                 duration_sec=duration_sec,
                 message_count=len(results),
                 tool_call_count=0,
-                save_file=save_file or None,
+                handoff_file=handoff_file or None,
+                handoff_file_written=handoff_file_written,
             )
 
-        # 返回 wrapped 内容（与 save_file_with_wrapper 格式一致）
+        # 返回 wrapped 内容
         # answer 包含所有任务的 XML wrapper 输出
         has_failures = failed_count > 0
         wrapped_content = "\n".join(all_wrapped) if all_wrapped else summary

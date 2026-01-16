@@ -52,9 +52,7 @@ WORKSPACE_DESCRIPTION = COMMON_PROPERTIES["workspace"]["description"]
 CONTINUATION_ID_DESCRIPTION = COMMON_PROPERTIES["continuation_id"]["description"]
 PERMISSION_DESCRIPTION = COMMON_PROPERTIES["permission"]["description"]
 MODEL_DESCRIPTION = COMMON_PROPERTIES["model"]["description"]
-SAVE_FILE_DESCRIPTION = COMMON_PROPERTIES["save_file"]["description"]
-SAVE_FILE_WITH_WRAPPER_DESCRIPTION = COMMON_PROPERTIES["save_file_with_wrapper"]["description"]
-SAVE_FILE_WITH_APPEND_MODE_DESCRIPTION = COMMON_PROPERTIES["save_file_with_append_mode"]["description"]
+HANDOFF_FILE_DESCRIPTION = COMMON_PROPERTIES["handoff_file"]["description"]
 REPORT_MODE_DESCRIPTION = COMMON_PROPERTIES["report_mode"]["description"]
 CONTEXT_PATHS_DESCRIPTION = COMMON_PROPERTIES["context_paths"]["description"]
 TASK_TAGS_DESCRIPTION = COMMON_PROPERTIES["task_tags"]["description"]
@@ -216,13 +214,11 @@ def create_server(
         async def codex(
             prompt: Annotated[str, Field(description=PROMPT_DESCRIPTION)],
             workspace: Annotated[str, Field(description=WORKSPACE_DESCRIPTION)],
+            handoff_file: Annotated[str, Field(description=HANDOFF_FILE_DESCRIPTION)],
             ctx: Context,
             continuation_id: Annotated[str, Field(description=CONTINUATION_ID_DESCRIPTION)] = "",
             permission: Annotated[PermissionType, Field(description=PERMISSION_DESCRIPTION)] = "read-only",
             model: Annotated[str, Field(description=MODEL_DESCRIPTION)] = "",
-            save_file: Annotated[str, Field(description=SAVE_FILE_DESCRIPTION)] = "",
-            save_file_with_wrapper: Annotated[bool, Field(description=SAVE_FILE_WITH_WRAPPER_DESCRIPTION)] = False,
-            save_file_with_append_mode: Annotated[bool, Field(description=SAVE_FILE_WITH_APPEND_MODE_DESCRIPTION)] = False,
             report_mode: Annotated[bool, Field(description=REPORT_MODE_DESCRIPTION)] = False,
             context_paths: Annotated[list[str], Field(description=CONTEXT_PATHS_DESCRIPTION)] = Field(default_factory=list),
             task_tags: Annotated[list[str], Field(description=TASK_TAGS_DESCRIPTION)] = Field(default_factory=list),
@@ -243,13 +239,11 @@ def create_server(
         async def gemini(
             prompt: Annotated[str, Field(description=PROMPT_DESCRIPTION)],
             workspace: Annotated[str, Field(description=WORKSPACE_DESCRIPTION)],
+            handoff_file: Annotated[str, Field(description=HANDOFF_FILE_DESCRIPTION)],
             ctx: Context,
             continuation_id: Annotated[str, Field(description=CONTINUATION_ID_DESCRIPTION)] = "",
             permission: Annotated[PermissionType, Field(description=PERMISSION_DESCRIPTION)] = "read-only",
             model: Annotated[str, Field(description=MODEL_DESCRIPTION)] = "",
-            save_file: Annotated[str, Field(description=SAVE_FILE_DESCRIPTION)] = "",
-            save_file_with_wrapper: Annotated[bool, Field(description=SAVE_FILE_WITH_WRAPPER_DESCRIPTION)] = False,
-            save_file_with_append_mode: Annotated[bool, Field(description=SAVE_FILE_WITH_APPEND_MODE_DESCRIPTION)] = False,
             report_mode: Annotated[bool, Field(description=REPORT_MODE_DESCRIPTION)] = False,
             context_paths: Annotated[list[str], Field(description=CONTEXT_PATHS_DESCRIPTION)] = Field(default_factory=list),
             task_tags: Annotated[list[str], Field(description=TASK_TAGS_DESCRIPTION)] = Field(default_factory=list),
@@ -269,13 +263,11 @@ def create_server(
         async def claude(
             prompt: Annotated[str, Field(description=PROMPT_DESCRIPTION)],
             workspace: Annotated[str, Field(description=WORKSPACE_DESCRIPTION)],
+            handoff_file: Annotated[str, Field(description=HANDOFF_FILE_DESCRIPTION)],
             ctx: Context,
             continuation_id: Annotated[str, Field(description=CONTINUATION_ID_DESCRIPTION)] = "",
             permission: Annotated[PermissionType, Field(description=PERMISSION_DESCRIPTION)] = "read-only",
             model: Annotated[str, Field(description=MODEL_DESCRIPTION)] = "",
-            save_file: Annotated[str, Field(description=SAVE_FILE_DESCRIPTION)] = "",
-            save_file_with_wrapper: Annotated[bool, Field(description=SAVE_FILE_WITH_WRAPPER_DESCRIPTION)] = False,
-            save_file_with_append_mode: Annotated[bool, Field(description=SAVE_FILE_WITH_APPEND_MODE_DESCRIPTION)] = False,
             report_mode: Annotated[bool, Field(description=REPORT_MODE_DESCRIPTION)] = False,
             context_paths: Annotated[list[str], Field(description=CONTEXT_PATHS_DESCRIPTION)] = Field(default_factory=list),
             task_tags: Annotated[list[str], Field(description=TASK_TAGS_DESCRIPTION)] = Field(default_factory=list),
@@ -298,13 +290,11 @@ def create_server(
         async def opencode(
             prompt: Annotated[str, Field(description=PROMPT_DESCRIPTION)],
             workspace: Annotated[str, Field(description=WORKSPACE_DESCRIPTION)],
+            handoff_file: Annotated[str, Field(description=HANDOFF_FILE_DESCRIPTION)],
             ctx: Context,
             continuation_id: Annotated[str, Field(description=CONTINUATION_ID_DESCRIPTION)] = "",
             permission: Annotated[PermissionType, Field(description=PERMISSION_DESCRIPTION)] = "read-only",
             model: Annotated[str, Field(description=MODEL_DESCRIPTION)] = "",
-            save_file: Annotated[str, Field(description=SAVE_FILE_DESCRIPTION)] = "",
-            save_file_with_wrapper: Annotated[bool, Field(description=SAVE_FILE_WITH_WRAPPER_DESCRIPTION)] = False,
-            save_file_with_append_mode: Annotated[bool, Field(description=SAVE_FILE_WITH_APPEND_MODE_DESCRIPTION)] = False,
             report_mode: Annotated[bool, Field(description=REPORT_MODE_DESCRIPTION)] = False,
             context_paths: Annotated[list[str], Field(description=CONTEXT_PATHS_DESCRIPTION)] = Field(default_factory=list),
             task_tags: Annotated[list[str], Field(description=TASK_TAGS_DESCRIPTION)] = Field(default_factory=list),
@@ -326,7 +316,7 @@ def create_server(
     if config.is_tool_allowed("codex"):
         async def codex_parallel(
             workspace: Annotated[str, Field(description=WORKSPACE_DESCRIPTION)],
-            save_file: Annotated[str, Field(description=SAVE_FILE_DESCRIPTION)],
+            handoff_file: Annotated[str, Field(description=HANDOFF_FILE_DESCRIPTION)],
             parallel_prompts: Annotated[list[str], Field(description=PARALLEL_PROMPTS_DESCRIPTION)],
             parallel_task_notes: Annotated[list[str], Field(description=PARALLEL_TASK_NOTES_DESCRIPTION)],
             ctx: Context,
@@ -346,7 +336,7 @@ def create_server(
             return await handle_tool("codex_parallel", arguments, ctx)
         register_tool_with_schema(
             name="codex_parallel",
-            description="Run multiple codex tasks in parallel. Results appended to save_file with XML wrappers.",
+            description=ParallelHandler("codex").description,
             schema=create_tool_schema("codex", is_parallel=True),
             fn=codex_parallel,
         )
@@ -354,7 +344,7 @@ def create_server(
     if config.is_tool_allowed("gemini"):
         async def gemini_parallel(
             workspace: Annotated[str, Field(description=WORKSPACE_DESCRIPTION)],
-            save_file: Annotated[str, Field(description=SAVE_FILE_DESCRIPTION)],
+            handoff_file: Annotated[str, Field(description=HANDOFF_FILE_DESCRIPTION)],
             parallel_prompts: Annotated[list[str], Field(description=PARALLEL_PROMPTS_DESCRIPTION)],
             parallel_task_notes: Annotated[list[str], Field(description=PARALLEL_TASK_NOTES_DESCRIPTION)],
             ctx: Context,
@@ -373,7 +363,7 @@ def create_server(
             return await handle_tool("gemini_parallel", arguments, ctx)
         register_tool_with_schema(
             name="gemini_parallel",
-            description="Run multiple gemini tasks in parallel.",
+            description=ParallelHandler("gemini").description,
             schema=create_tool_schema("gemini", is_parallel=True),
             fn=gemini_parallel,
         )
@@ -381,7 +371,7 @@ def create_server(
     if config.is_tool_allowed("claude"):
         async def claude_parallel(
             workspace: Annotated[str, Field(description=WORKSPACE_DESCRIPTION)],
-            save_file: Annotated[str, Field(description=SAVE_FILE_DESCRIPTION)],
+            handoff_file: Annotated[str, Field(description=HANDOFF_FILE_DESCRIPTION)],
             parallel_prompts: Annotated[list[str], Field(description=PARALLEL_PROMPTS_DESCRIPTION)],
             parallel_task_notes: Annotated[list[str], Field(description=PARALLEL_TASK_NOTES_DESCRIPTION)],
             ctx: Context,
@@ -403,7 +393,7 @@ def create_server(
             return await handle_tool("claude_parallel", arguments, ctx)
         register_tool_with_schema(
             name="claude_parallel",
-            description="Run multiple claude tasks in parallel.",
+            description=ParallelHandler("claude").description,
             schema=create_tool_schema("claude", is_parallel=True),
             fn=claude_parallel,
         )
@@ -411,7 +401,7 @@ def create_server(
     if config.is_tool_allowed("opencode"):
         async def opencode_parallel(
             workspace: Annotated[str, Field(description=WORKSPACE_DESCRIPTION)],
-            save_file: Annotated[str, Field(description=SAVE_FILE_DESCRIPTION)],
+            handoff_file: Annotated[str, Field(description=HANDOFF_FILE_DESCRIPTION)],
             parallel_prompts: Annotated[list[str], Field(description=PARALLEL_PROMPTS_DESCRIPTION)],
             parallel_task_notes: Annotated[list[str], Field(description=PARALLEL_TASK_NOTES_DESCRIPTION)],
             ctx: Context,
@@ -432,7 +422,7 @@ def create_server(
             return await handle_tool("opencode_parallel", arguments, ctx)
         register_tool_with_schema(
             name="opencode_parallel",
-            description="Run multiple opencode tasks in parallel.",
+            description=ParallelHandler("opencode").description,
             schema=create_tool_schema("opencode", is_parallel=True),
             fn=opencode_parallel,
         )

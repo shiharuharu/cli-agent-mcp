@@ -16,7 +16,7 @@
 - **Claude**：书记员。忠实执行，清晰文档，把想法变成可运行的代码。
 - **Banana**：艺术家。高保真图片生成，用于 UI 原型、产品视觉和创意资产。
 
-**想要持久化结果？** 使用 `save_file` 捕获 agent 输出，然后让 Claude 综合多次分析的洞察。
+**想要持久化结果？** 使用 `handoff_file` 捕获 agent 输出，然后让 Claude 综合多次分析的洞察。
 
 我们不只是封装 CLI —— 我们提供一种**人机协作的思维框架**。
 
@@ -76,13 +76,11 @@ pip install -e .
 |------|------|------|--------|------|
 | `prompt` | string | ✓ | - | 任务指令 |
 | `workspace` | string | ✓ | - | 项目目录的绝对路径 |
+| `handoff_file` | string | ✓ | - | 必填。服务端追加写入输出（永远 append，永远用 `<agent-output ...>` 包裹） |
 | `continuation_id` | string | | `""` | 传入上次响应中的 ID 以继续对话 |
 | `permission` | string | | `read-only` | 权限级别：`read-only`、`workspace-write`、`unlimited` |
 | `model` | string | | `""` | 模型覆盖（仅在明确请求时指定） |
-| `save_file` | string | | `""` | 大输出首选。直接写入文件，避免上下文溢出 |
 | `report_mode` | boolean | | `false` | 生成独立报告格式 |
-| `save_file_with_wrapper` | boolean | | `false` | 用 `<agent-output>` XML 标签包裹输出 |
-| `save_file_with_append_mode` | boolean | | `false` | 追加到文件而非覆盖 |
 | `verbose_output` | boolean | | `false` | 返回包含推理过程的详细输出 |
 | `context_paths` | array | | `[]` | 提供上下文的参考文件/目录路径 |
 | `image` | array | | `[]` | 用于视觉上下文的图片文件绝对路径 |
@@ -99,13 +97,11 @@ pip install -e .
 |------|------|------|--------|------|
 | `prompt` | string | ✓ | - | 任务指令 |
 | `workspace` | string | ✓ | - | 项目目录的绝对路径 |
+| `handoff_file` | string | ✓ | - | 必填。服务端追加写入输出（永远 append，永远用 `<agent-output ...>` 包裹） |
 | `continuation_id` | string | | `""` | 传入上次响应中的 ID 以继续对话 |
 | `permission` | string | | `read-only` | 权限级别：`read-only`、`workspace-write`、`unlimited` |
 | `model` | string | | `""` | 模型覆盖 |
-| `save_file` | string | | `""` | 大输出首选。直接写入文件，避免上下文溢出 |
 | `report_mode` | boolean | | `false` | 生成独立报告格式 |
-| `save_file_with_wrapper` | boolean | | `false` | 用 `<agent-output>` XML 标签包裹输出 |
-| `save_file_with_append_mode` | boolean | | `false` | 追加到文件而非覆盖 |
 | `verbose_output` | boolean | | `false` | 返回包含推理过程的详细输出 |
 | `context_paths` | array | | `[]` | 提供上下文的参考文件/目录路径 |
 | `task_note` | string | | `""` | GUI 显示标签 |
@@ -121,13 +117,11 @@ pip install -e .
 |------|------|------|--------|------|
 | `prompt` | string | ✓ | - | 任务指令 |
 | `workspace` | string | ✓ | - | 项目目录的绝对路径 |
+| `handoff_file` | string | ✓ | - | 必填。服务端追加写入输出（永远 append，永远用 `<agent-output ...>` 包裹） |
 | `continuation_id` | string | | `""` | 传入上次响应中的 ID 以继续对话 |
 | `permission` | string | | `read-only` | 权限级别：`read-only`、`workspace-write`、`unlimited` |
 | `model` | string | | `""` | 模型覆盖（`sonnet`、`opus` 或完整模型名） |
-| `save_file` | string | | `""` | 大输出首选。直接写入文件，避免上下文溢出 |
 | `report_mode` | boolean | | `false` | 生成独立报告格式 |
-| `save_file_with_wrapper` | boolean | | `false` | 用 `<agent-output>` XML 标签包裹输出 |
-| `save_file_with_append_mode` | boolean | | `false` | 追加到文件而非覆盖 |
 | `verbose_output` | boolean | | `false` | 返回包含推理过程的详细输出 |
 | `context_paths` | array | | `[]` | 提供上下文的参考文件/目录路径 |
 | `system_prompt` | string | | `""` | 完全替换默认系统提示 |
@@ -146,13 +140,11 @@ pip install -e .
 |------|------|------|--------|------|
 | `prompt` | string | ✓ | - | 任务指令 |
 | `workspace` | string | ✓ | - | 项目目录的绝对路径 |
+| `handoff_file` | string | ✓ | - | 必填。服务端追加写入输出（永远 append，永远用 `<agent-output ...>` 包裹） |
 | `continuation_id` | string | | `""` | 传入上次响应中的 ID 以继续对话 |
 | `permission` | string | | `read-only` | 权限级别：`read-only`、`workspace-write`、`unlimited` |
 | `model` | string | | `""` | 模型覆盖（格式：`provider/model`） |
-| `save_file` | string | | `""` | 大输出首选。直接写入文件，避免上下文溢出 |
 | `report_mode` | boolean | | `false` | 生成独立报告格式 |
-| `save_file_with_wrapper` | boolean | | `false` | 用 `<agent-output>` XML 标签包裹输出 |
-| `save_file_with_append_mode` | boolean | | `false` | 追加到文件而非覆盖 |
 | `verbose_output` | boolean | | `false` | 返回包含推理过程的详细输出 |
 | `context_paths` | array | | `[]` | 提供上下文的参考文件/目录路径 |
 | `file` | array | | `[]` | 要附加的文件绝对路径 |
@@ -229,7 +221,7 @@ Nano Banana Pro 拥有卓越的理解能力和视觉表达能力——你的提�
 
 ### `report_mode`
 
-当同时设置 `save_file` 和 `report_mode` 时，会注入输出格式要求：
+当设置 `report_mode` 时，会注入输出格式要求：
 
 ```xml
 <你的提示词>
@@ -281,35 +273,32 @@ Nano Banana Pro 拥有卓越的理解能力和视觉表达能力——你的提�
 1. 提供之前响应中的 `continuation_id`，或
 2. 将引用展开为具体细节
 
-## 文件输出选项
+## Handoff File
 
-### `save_file_with_wrapper`
+`handoff_file` 是所有 CLI 工具的必填参数。服务端会在每次执行完成后，把输出追加写入该文件。
 
-启用时，输出会被 XML 标签包裹，包含元数据：
+行为（永远如此）：
+- 永远 append（不覆盖）
+- 永远用 `<agent-output ...>` 包裹，包含 `agent`、`continuation_id`、`task_note`、`task_index`、`status`
+- `task_index`：单任务 = `0`；parallel 子任务 = `1..N`
+- 失败时也会写入：`status="error"` + `Error: ...` 错误信息
+
+安全提示：
+- 避免并发写同一路径（输出可能交错）
+- 避免“双写冲突”：不要把 `handoff_file` 指向提示词要求 agent 需要编辑的文件
+- 推荐放到 `.agent-handoff/`（例如 `.agent-handoff/handoff_chain.md`）
+
+Wrapper 示例：
 
 ```
-<agent-output agent="gemini" continuation_id="abc123">
-... agent 响应 ...
+<agent-output agent="gemini" continuation_id="abc123" task_note="UI 审核" task_index="0" status="success">
+... agent 输出（Markdown）...
 </agent-output>
 ```
 
-### `save_file_with_append_mode`
+### 迁移：`save_file` → `handoff_file`
 
-启用时，新输出追加到现有文件而非覆盖。配合 `save_file_with_wrapper` 使用，可实现多 agent 协作：
-
-```
-<agent-output agent="codex" continuation_id="...">
-代码库的批判性分析...
-</agent-output>
-
-<agent-output agent="gemini" continuation_id="...">
-改进的创意建议...
-</agent-output>
-
-<agent-output agent="claude" continuation_id="...">
-实现总结...
-</agent-output>
-```
+`save_file`、`save_file_with_wrapper`、`save_file_with_append_mode` 已移除，请改用 `handoff_file`（必填；永远 append；永远 wrapper）。
 
 ## 响应格式
 
