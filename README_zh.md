@@ -59,6 +59,8 @@ pip install -e .
 | `CAM_GUI` | 启用 GUI 仪表盘 | `true` |
 | `CAM_GUI_DETAIL` | GUI 详细模式 | `false` |
 | `CAM_GUI_KEEP` | 退出时保留 GUI | `false` |
+| `CAM_GUI_HOST` | GUI 绑定地址 | `127.0.0.1` |
+| `CAM_GUI_PORT` | GUI 端口（建议设置固定端口以保持 URL 稳定） | `0`（随机） |
 | `CAM_DEBUG` | MCP 响应中包含调试信息 | `false` |
 | `CAM_LOG_DEBUG` | 将调试日志写入临时文件 | `false` |
 | `CAM_SIGINT_MODE` | SIGINT 处理方式（`cancel`/`exit`/`cancel_then_exit`） | `cancel` |

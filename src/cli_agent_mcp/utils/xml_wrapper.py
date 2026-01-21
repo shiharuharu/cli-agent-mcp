@@ -27,9 +27,15 @@ def build_wrapper(
     task_note: str,
     task_index: int,
     status: str,
-    content: str,
+    prompt: str,
+    response: str,
 ) -> str:
     """构建 XML-like wrapper。"""
-    return f'''<agent-output agent="{xml_escape_attr(agent)}" continuation_id="{xml_escape_attr(continuation_id)}" task_note="{xml_escape_attr(task_note)}" task_index="{task_index}" status="{status}">
-{content}
+    return f'''<agent-output agent="{xml_escape_attr(agent)}" continuation_id="{xml_escape_attr(continuation_id)}" task_note="{xml_escape_attr(task_note)}" task_index="{task_index}" status="{xml_escape_attr(status)}">
+  <prompt>
+{prompt}
+  </prompt>
+  <response>
+{response}
+  </response>
 </agent-output>'''

@@ -103,6 +103,9 @@ body {{
     border-radius: 3px;
 }}
 .status-text.paused {{ color: {COLORS["warning"]}; }}
+.status-text.connected {{ color: {COLORS["success"]}; }}
+.status-text.disconnected {{ color: {COLORS["error"]}; }}
+.status-text.reconnecting {{ color: {COLORS["warning"]}; }}
 .task-info {{
     flex: 1;
     font-size: 11px;
@@ -268,6 +271,7 @@ body {{
         <span id="scroll-icon">⏸</span>
     </button>
     <span id="scroll-status" class="status-text">Auto</span>
+    <span id="conn-status" class="status-text reconnecting">SSE: connecting...</span>
     <span id="current-task" class="task-info"></span>
     <span id="event-count">0 events</span>
     <button onclick="toggleSidebar()" id="sidebar-toggle-btn" title="Toggle Sessions panel">
@@ -306,6 +310,14 @@ let currentTaskNotes = [];  // 累积的 task_notes（用于 parallel 模式）
 let taskNoteResetTimer = null;  // 重置计时器
 const content = document.getElementById('content');
 const sessionList = document.getElementById('session-list');
+const connStatus = document.getElementById('conn-status');
+
+function setConnStatus(text, stateClass) {{
+    if (!connStatus) return;
+    connStatus.textContent = text;
+    connStatus.classList.remove('connected', 'disconnected', 'reconnecting');
+    if (stateClass) connStatus.classList.add(stateClass);
+}}
 
 // Add event to display
 function addEvent(html, sessionId, source, taskNote) {{
@@ -581,14 +593,15 @@ function updateStatus(status) {{
 (function() {{
     let evtSource = null;
     let reconnectAttempts = 0;
-    const maxReconnectAttempts = 10;
 
     function connect() {{
+        setConnStatus('SSE: connecting...', 'reconnecting');
         evtSource = new EventSource('/sse');
 
         evtSource.onopen = function() {{
             console.log('SSE connected');
             reconnectAttempts = 0;
+            setConnStatus('SSE: connected', 'connected');
         }};
 
         evtSource.onmessage = function(e) {{
@@ -608,12 +621,11 @@ function updateStatus(status) {{
             console.log('SSE connection lost');
             evtSource.close();
 
-            if (reconnectAttempts < maxReconnectAttempts) {{
-                reconnectAttempts++;
-                const delay = Math.min(1000 * reconnectAttempts, 10000);
-                console.log(`Reconnecting in ${{delay}}ms (attempt ${{reconnectAttempts}})`);
-                setTimeout(connect, delay);
-            }}
+            reconnectAttempts++;
+            const delay = Math.min(1000 * reconnectAttempts, 10000);
+            setConnStatus(`SSE: reconnecting in ${{Math.round(delay / 100) / 10}}s (attempt ${{reconnectAttempts}})`, 'reconnecting');
+            console.log(`Reconnecting in ${{delay}}ms (attempt ${{reconnectAttempts}})`);
+            setTimeout(connect, delay);
         }};
     }}
 

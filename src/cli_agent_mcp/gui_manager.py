@@ -25,6 +25,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
+from urllib.parse import urlparse
 
 __all__ = ["GUIManager", "GUIConfig"]
 
@@ -79,6 +80,10 @@ def _gui_process_entry(
     detail_mode = config_dict.get("detail_mode", False)
     heartbeat_timeout = config_dict.get("heartbeat_timeout", 10.0)
     heartbeat_enabled = heartbeat_queue is not None
+
+    preferred_port = config_dict.get("port")
+    if preferred_port:
+        os.environ["CAM_GUI_PORT"] = str(preferred_port)
 
     # 创建 viewer
     viewer = LiveViewer(ViewerConfig(title=title, multi_source_mode=True))
@@ -193,6 +198,7 @@ class GUIManager:
 
         # GUI URL
         self._url: str | None = None
+        self._stable_port: int | None = None  # best-effort port reuse across GUI restarts
 
         # 状态
         self._running = False
@@ -293,11 +299,19 @@ class GUIManager:
     def _spawn_gui(self) -> bool:
         """创建并启动 GUI 子进程。"""
         try:
+            env_port = 0
+            try:
+                env_port = int(os.environ.get("CAM_GUI_PORT") or "0")
+            except ValueError:
+                env_port = 0
+
             config_dict = {
                 "title": self.config.title,
                 "detail_mode": self.config.detail_mode,
                 "heartbeat_timeout": self.config.heartbeat_timeout,
             }
+            if env_port <= 0 and self._stable_port:
+                config_dict["port"] = self._stable_port
 
             # KEEP_GUI=true 时禁用心跳检测，GUI 不会因心跳超时而关闭
             heartbeat_queue = None if self.config.keep_on_exit else self._heartbeat_queue
@@ -331,6 +345,14 @@ class GUIManager:
                 logger.debug(f"GUI URL received: {self._url}")
             except queue.Empty:
                 logger.warning("Failed to get GUI URL")
+
+            if self._url and env_port <= 0:
+                try:
+                    parsed = urlparse(self._url)
+                    if parsed.port:
+                        self._stable_port = parsed.port
+                except Exception:
+                    pass
 
             logger.info(f"GUI process started (PID: {self._process.pid}, URL: {self._url}, heartbeat={'disabled' if self.config.keep_on_exit else 'enabled'})")
             return True

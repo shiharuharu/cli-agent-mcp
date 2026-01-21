@@ -192,6 +192,7 @@ class ParallelHandler(ToolHandler):
             continuation_id = continuation_ids[idx - 1] if idx <= len(continuation_ids) else ""
             sub_tasks.append({
                 "prompt": final_prompt,
+                "_original_prompt": prompt,  # 保存原始 prompt 用于 handoff
                 "workspace": arguments.get("workspace"),
                 "permission": arguments.get("permission", "read-only"),
                 "model": model,
@@ -210,7 +211,7 @@ class ParallelHandler(ToolHandler):
         # 3) 并发执行
         sem = asyncio.Semaphore(max_conc)
         should_stop = False
-        results: list[tuple[int, str, Any]] = []  # (task_index, task_note, result|Exception|None)
+        results: list[tuple[int, str, str, Any]] = []  # (task_index, task_note, original_prompt, result|Exception|None)
 
         # progress reporter（MCP 保活）
         progress_task: asyncio.Task | None = None
@@ -250,12 +251,13 @@ class ParallelHandler(ToolHandler):
 
         async def run_one(sub_args: dict):
             nonlocal should_stop, done_count
+            original_prompt = sub_args.get("_original_prompt", "")
 
             async with sem:
                 try:
                     # fail_fast 检查必须在拿到 semaphore 后
                     if fail_fast and should_stop:
-                        return (sub_args["_task_index"], sub_args["task_note"], None)  # skipped
+                        return (sub_args["_task_index"], sub_args["task_note"], original_prompt, None)  # skipped
 
                     # 创建 invoker（传入 task_note 和 task_index 用于 GUI 显示）
                     task_note = sub_args.get("task_note", "")
@@ -271,7 +273,7 @@ class ParallelHandler(ToolHandler):
 
                     if not result.success and fail_fast:
                         should_stop = True
-                    return (sub_args["_task_index"], sub_args["task_note"], result)
+                    return (sub_args["_task_index"], sub_args["task_note"], original_prompt, result)
 
                 except asyncio.CancelledError:
                     # 必须 re-raise，不能当作普通异常处理
@@ -279,7 +281,7 @@ class ParallelHandler(ToolHandler):
                 except Exception as e:
                     if fail_fast:
                         should_stop = True
-                    return (sub_args["_task_index"], sub_args["task_note"], e)
+                    return (sub_args["_task_index"], sub_args["task_note"], original_prompt, e)
                 finally:
                     done_count += 1
                     if ctx.has_progress_token():
@@ -324,14 +326,22 @@ class ParallelHandler(ToolHandler):
 
         formatter = get_formatter()
 
-        for idx, note, result in results:
+        for idx, note, original_prompt, result in results:
             if result is None:
                 # skipped (fail_fast)
                 skipped_count += 1
                 summary_lines.append(f"- [{idx}] {note} | skipped")
                 continue
             elif isinstance(result, Exception):
-                content = f"Error: {result}"
+                response_data = ResponseData(
+                    answer="",
+                    session_id="",
+                    thought_steps=[],
+                    debug_info=None,
+                    success=False,
+                    error=str(result),
+                )
+                content = formatter.format_for_file(response_data)
                 status = "error"
                 session_id = ""
                 failed_count += 1
@@ -353,14 +363,22 @@ class ParallelHandler(ToolHandler):
                 summary_lines.append(f"- [{idx}] {note} | success | session={session_id}")
             else:
                 # result.error 已包含 exit code + stderr
-                content = result.error or "Unknown error"
+                response_data = ResponseData(
+                    answer=result.agent_messages,
+                    session_id=result.session_id or "",
+                    thought_steps=[],
+                    debug_info=None,
+                    success=False,
+                    error=result.error,
+                )
+                content = formatter.format_for_file(response_data)
                 status = "error"
                 session_id = result.session_id or ""
                 failed_count += 1
                 summary_lines.append(f"- [{idx}] {note} | error | session={session_id}")
 
             # 构建 wrapper
-            wrapped = build_wrapper(self._base_name, session_id, note, idx, status, content)
+            wrapped = build_wrapper(self._base_name, session_id, note, idx, status, original_prompt, content)
             all_wrapped.append(wrapped)
 
         # 4.5) 批量写入文件（单次 I/O 操作）

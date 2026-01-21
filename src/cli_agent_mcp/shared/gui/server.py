@@ -34,7 +34,7 @@ class ServerConfig:
     """服务器配置"""
     host: str = "127.0.0.1"
     port: int = 0  # 0 = 随机端口
-    grace_period: float = 2.0  # 宽限期（秒）
+    grace_period: float = 10.0  # 宽限期（秒）
     max_clients: int = 10  # 最大客户端数
 
 

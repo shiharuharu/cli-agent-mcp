@@ -176,7 +176,18 @@ class LiveViewer:
             port=int(os.environ.get("CAM_GUI_PORT", "0")),
         )
         self._server = GUIServer(html, server_config)
-        self._server.start()
+        try:
+            self._server.start()
+        except OSError as e:
+            if server_config.port:
+                logger.warning(
+                    f"Failed to bind GUI server on port {server_config.port} ({e}), falling back to random port"
+                )
+                server_config.port = 0
+                self._server = GUIServer(html, server_config)
+                self._server.start()
+            else:
+                raise
         self._url = self._server.url
 
         # 设置 file_url_resolver
@@ -261,6 +272,11 @@ class LiveViewer:
     def _on_all_clients_disconnected(self):
         """所有客户端断开时的回调"""
         logger.info("All clients disconnected")
+        # pywebview 模式下不自杀，等待客户端重连（如页面刷新）
+        if self._window is not None:
+            logger.info("Pywebview mode: waiting for client reconnection")
+            return
+        # 纯浏览器模式：关闭 viewer
         self._closed.set()
         # 停止 HTTP 服务器
         if self._server:

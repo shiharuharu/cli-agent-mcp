@@ -59,6 +59,8 @@ Configure via environment variables:
 | `CAM_GUI` | Enable GUI dashboard | `true` |
 | `CAM_GUI_DETAIL` | GUI detail mode | `false` |
 | `CAM_GUI_KEEP` | Keep GUI on exit | `false` |
+| `CAM_GUI_HOST` | GUI bind host | `127.0.0.1` |
+| `CAM_GUI_PORT` | GUI bind port (set a fixed port to keep URL stable across restarts) | `0` (random) |
 | `CAM_DEBUG` | Include debug info in MCP responses | `false` |
 | `CAM_LOG_DEBUG` | Write debug logs to temp file | `false` |
 | `CAM_SIGINT_MODE` | SIGINT handling (`cancel`/`exit`/`cancel_then_exit`) | `cancel` |

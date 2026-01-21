@@ -193,7 +193,8 @@ class CLIHandler(ToolHandler):
         arguments = normalize_path_arguments(self._cli_type, arguments)
 
         task_note = arguments.get("task_note", "")
-        prompt = arguments.get("prompt", "")
+        original_prompt = arguments.get("prompt", "")
+        prompt = original_prompt
 
         # 创建 invoker（per-request 隔离）
         event_callback = ctx.make_event_callback(self._cli_type, task_note, None) if ctx.gui_manager else None
@@ -312,6 +313,7 @@ class CLIHandler(ToolHandler):
                         task_note,
                         0,
                         status,
+                        original_prompt,
                         file_content,
                     )
 
