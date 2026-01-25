@@ -272,15 +272,12 @@ class LiveViewer:
     def _on_all_clients_disconnected(self):
         """所有客户端断开时的回调"""
         logger.info("All clients disconnected")
-        # pywebview 模式下不自杀，等待客户端重连（如页面刷新）
+        # 断开可能由休眠/网络切换/页面刷新导致；无论模式都不自杀，等待重连。
         if self._window is not None:
             logger.info("Pywebview mode: waiting for client reconnection")
-            return
-        # 纯浏览器模式：关闭 viewer
-        self._closed.set()
-        # 停止 HTTP 服务器
-        if self._server:
-            self._server.stop()
+        else:
+            logger.info("Browser mode: waiting for client reconnection")
+        return
 
     def _poll_queue_loop(self) -> None:
         """后台轮询线程主循环 - 不再依赖 self._window"""

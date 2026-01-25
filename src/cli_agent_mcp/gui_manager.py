@@ -21,6 +21,7 @@ import multiprocessing as mp
 import os
 import queue
 import signal
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
@@ -47,7 +48,7 @@ class GUIConfig:
     restart_window: float = 60.0  # 重启计数窗口（秒）
     initial_delay: float = 3.0  # 首次启动延迟（秒）- 规避调度器问题
 
-    # 心跳（仅用于检测主进程被 SIGKILL）
+    # 心跳（Windows 兜底：用于检测主进程异常退出）
     heartbeat_interval: float = 2.0
     heartbeat_timeout: float = 10.0
 
@@ -59,7 +60,7 @@ def _gui_process_entry(
     event_queue: mp.Queue,
     shutdown_event: mp.Event,
     startup_complete: mp.Event,
-    heartbeat_queue: mp.Queue | None,  # None 表示禁用心跳检测 (KEEP_GUI=true)
+    heartbeat_queue: mp.Queue | None,  # Windows 兜底心跳；None 表示禁用
     url_queue: mp.Queue,  # 用于传回 GUI URL
     config_dict: dict,
 ) -> None:
@@ -68,7 +69,7 @@ def _gui_process_entry(
     职责：
     1. 创建并运行 GUI 窗口
     2. 监听 shutdown_event
-    3. 如果启用心跳，检测主进程异常退出
+    3. 检测主进程是否退出（macOS/Linux: PPID；Windows: 心跳兜底）
     """
     try:
         from cli_agent_mcp.shared.gui import LiveViewer, ViewerConfig
@@ -79,7 +80,9 @@ def _gui_process_entry(
     title = config_dict.get("title", "CLI Agent MCP")
     detail_mode = config_dict.get("detail_mode", False)
     heartbeat_timeout = config_dict.get("heartbeat_timeout", 10.0)
-    heartbeat_enabled = heartbeat_queue is not None
+    keep_on_exit = bool(config_dict.get("keep_on_exit", False))
+    watch_parent = not keep_on_exit
+    initial_ppid = os.getppid()
 
     preferred_port = config_dict.get("port")
     if preferred_port:
@@ -100,17 +103,30 @@ def _gui_process_entry(
 
     # 状态
     should_exit = threading.Event()
-    last_heartbeat = time.time()
-    heartbeat_lock = threading.Lock()
 
-    def update_heartbeat():
+    # Windows 心跳兜底（避免 PID 复用/PPID 语义差异）
+    use_heartbeat_watchdog = watch_parent and sys.platform == "win32" and heartbeat_queue is not None
+    last_heartbeat = time.monotonic()
+
+    def update_heartbeat() -> None:
         nonlocal last_heartbeat
-        with heartbeat_lock:
-            last_heartbeat = time.time()
+        last_heartbeat = time.monotonic()
 
     def check_heartbeat_timeout() -> bool:
-        with heartbeat_lock:
-            return (time.time() - last_heartbeat) > heartbeat_timeout
+        return (time.monotonic() - last_heartbeat) > heartbeat_timeout
+
+    def parent_exited_posix() -> bool:
+        """POSIX: 通过 PPID 变化 + kill(0) 判定父进程是否退出。"""
+        if os.getppid() != initial_ppid:
+            return True
+        try:
+            os.kill(initial_ppid, 0)
+        except ProcessLookupError:
+            return True
+        except PermissionError:
+            # 没权限但进程存在：视为仍存活
+            return False
+        return False
 
     # 事件轮询线程
     def poll_events():
@@ -139,8 +155,31 @@ def _gui_process_entry(
                 viewer.close()
                 return
 
-            # 检查心跳（仅当启用时）
-            if heartbeat_enabled:
+            # keep_on_exit=True 时禁用父进程退出监控（GUI 常驻）
+            if watch_parent:
+                # macOS/Linux：优先用 PPID 判定父进程是否退出
+                if os.name == "posix":
+                    if parent_exited_posix():
+                        logger.warning(
+                            "Parent process appears to have exited "
+                            f"(initial_ppid={initial_ppid}, current_ppid={os.getppid()})"
+                        )
+                        should_exit.set()
+                        viewer.close()
+                        return
+                else:
+                    # 非 POSIX：尽力而为（Windows 下通常依赖心跳兜底）
+                    if os.getppid() != initial_ppid:
+                        logger.warning(
+                            "Parent process appears to have changed "
+                            f"(initial_ppid={initial_ppid}, current_ppid={os.getppid()})"
+                        )
+                        should_exit.set()
+                        viewer.close()
+                        return
+
+            # Windows：保留心跳兜底
+            if use_heartbeat_watchdog:
                 try:
                     heartbeat_queue.get(timeout=0.5)
                     update_heartbeat()
@@ -151,7 +190,6 @@ def _gui_process_entry(
                         viewer.close()
                         return
             else:
-                # 心跳禁用时，只检查 shutdown_event
                 time.sleep(0.5)
 
     # 启动工作线程
@@ -260,7 +298,11 @@ class GUIManager:
 
                 # 创建 IPC 资源
                 self._event_queue = mp.Queue(maxsize=5000)
-                self._heartbeat_queue = mp.Queue(maxsize=10)
+                self._heartbeat_queue = (
+                    mp.Queue(maxsize=10)
+                    if (sys.platform == "win32" and not self.config.keep_on_exit)
+                    else None
+                )
                 self._url_queue = mp.Queue(maxsize=1)
                 self._shutdown_event = mp.Event()
                 self._startup_complete = mp.Event()
@@ -270,11 +312,12 @@ class GUIManager:
                     logger.warning("Failed to start GUI")
                     return
 
-                # 启动心跳线程
-                self._heartbeat_thread = threading.Thread(
-                    target=self._heartbeat_loop, daemon=True, name="gui_heartbeat"
-                )
-                self._heartbeat_thread.start()
+                # 启动心跳线程（仅 Windows 兜底）
+                if self._heartbeat_queue is not None:
+                    self._heartbeat_thread = threading.Thread(
+                        target=self._heartbeat_loop, daemon=True, name="gui_heartbeat"
+                    )
+                    self._heartbeat_thread.start()
 
                 # 启动监控线程
                 self._monitor_thread = threading.Thread(
@@ -309,12 +352,13 @@ class GUIManager:
                 "title": self.config.title,
                 "detail_mode": self.config.detail_mode,
                 "heartbeat_timeout": self.config.heartbeat_timeout,
+                "keep_on_exit": self.config.keep_on_exit,
             }
             if env_port <= 0 and self._stable_port:
                 config_dict["port"] = self._stable_port
 
-            # KEEP_GUI=true 时禁用心跳检测，GUI 不会因心跳超时而关闭
-            heartbeat_queue = None if self.config.keep_on_exit else self._heartbeat_queue
+            # heartbeat_queue 仅用于 Windows 兜底；keep_on_exit 时为 None
+            heartbeat_queue = self._heartbeat_queue
 
             # daemon=True: 默认随主进程退出（避免进程驻留）
             # daemon=False: keep_on_exit 时保留 GUI
@@ -354,7 +398,10 @@ class GUIManager:
                 except Exception:
                     pass
 
-            logger.info(f"GUI process started (PID: {self._process.pid}, URL: {self._url}, heartbeat={'disabled' if self.config.keep_on_exit else 'enabled'})")
+            watchdog = "none" if self.config.keep_on_exit else ("heartbeat" if sys.platform == "win32" else "ppid")
+            logger.info(
+                f"GUI process started (PID: {self._process.pid}, URL: {self._url}, watchdog={watchdog})"
+            )
             return True
 
         except Exception as e:
@@ -427,7 +474,11 @@ class GUIManager:
 
         # 重建 IPC 资源（旧的可能已损坏）
         self._event_queue = mp.Queue(maxsize=5000)
-        self._heartbeat_queue = mp.Queue(maxsize=10)
+        self._heartbeat_queue = (
+            mp.Queue(maxsize=10)
+            if (sys.platform == "win32" and not self.config.keep_on_exit)
+            else None
+        )
         self._url_queue = mp.Queue(maxsize=1)
         self._shutdown_event = mp.Event()
         self._startup_complete = mp.Event()
@@ -486,7 +537,6 @@ class GUIManager:
             # 如果配置了保留 GUI，不终止进程
             if self.config.keep_on_exit:
                 logger.info("GUI Manager stopped (GUI window kept alive)")
-                # 清空心跳队列，GUI 会因心跳超时自行关闭（如果需要）
                 return
 
             # 终止进程
