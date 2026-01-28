@@ -22,6 +22,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -366,6 +367,15 @@ class CLIInvoker(ABC):
             )
 
         cmd = self.build_command(params)
+
+        # Windows 兼容：解析命令的完整路径
+        # asyncio.create_subprocess_exec() 不会像 shell 那样自动搜索 PATHEXT 扩展名
+        # 在 Windows 下，npm 安装的 CLI 工具（如 codex.cmd）需要完整路径
+        if sys.platform == "win32" and cmd:
+            resolved_path = shutil.which(cmd[0])
+            if resolved_path:
+                cmd[0] = resolved_path
+
         logger.info(f"Executing: {' '.join(cmd)}")
 
         # 首次事件超时重试循环
